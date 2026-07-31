@@ -1,0 +1,30 @@
+{
+  "name": "gold-pulse-x-v9-free-mode",
+  "version": "9.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "doctor": "node scripts/doctor.mjs",
+    "schedule:5": "node scripts/set-scan-interval.mjs 5",
+    "schedule:10": "node scripts/set-scan-interval.mjs 10",
+    "schedule:15": "node scripts/set-scan-interval.mjs 15",
+    "check": "node scripts/static-check.mjs"
+  },
+  "dependencies": {
+    "lightweight-charts": "^5.2.0",
+    "next": "^16.2.11",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.0"
+  }
+}
