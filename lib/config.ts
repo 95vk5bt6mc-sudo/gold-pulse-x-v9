@@ -22,7 +22,7 @@ export function getRuntimeConfig() {
       : "broadcast";
 
   return {
-    version: "9.0.0",
+    version: "9.5.0",
     provider: process.env.GOLD_PULSE_DATA_PROVIDER || "twelve-data",
     marketDataConfigured: Boolean(process.env.TWELVE_DATA_API_KEY),
     apiSecretConfigured: Boolean(process.env.GOLD_PULSE_API_SECRET),

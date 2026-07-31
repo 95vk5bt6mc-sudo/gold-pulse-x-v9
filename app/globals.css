@@ -343,3 +343,11 @@ header button {
 /* v9 TradingView chart host */
 .chartCanvas{width:100%;height:440px;min-height:320px;position:relative}
 @media(max-width:720px){.chartCanvas{height:360px}}
+
+
+/* v9.5 Smart Free */
+.smartFreePanel{margin-bottom:10px;border-color:#7a6530;background:linear-gradient(135deg,#171a20,#101820)}
+.smartFreePanel h2{margin:3px 0 0}.smartMode{padding:7px 10px;border-radius:999px;font-size:11px;font-weight:900;letter-spacing:.09em;background:#232b36}.smartMode.active{color:var(--up);border:1px solid rgba(57,214,159,.45)}.smartMode.sleep{color:var(--wait);border:1px solid rgba(243,184,79,.45)}
+.smartFreeGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.smartFreeGrid span{display:flex;flex-direction:column;gap:5px;padding:11px;border:1px solid var(--line);border-radius:10px;background:#0c1219;color:var(--muted);font-size:12px}.smartFreeGrid b{color:var(--text);font-size:15px}.smartExplain{display:grid;gap:6px;margin:10px 0 12px;padding:12px;border-radius:11px;background:rgba(255,255,255,.035)}.smartExplain p{margin-bottom:2px}.smartExplain span{font-size:12px;color:var(--muted);line-height:1.45}.smartFreePanel>small{color:var(--muted);line-height:1.5}.smartSleepPanel{border-color:#7a6530}
+@media(max-width:760px){.smartFreeGrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:460px){.smartFreeGrid{grid-template-columns:1fr}}

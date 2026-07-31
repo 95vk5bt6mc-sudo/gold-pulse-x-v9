@@ -38,7 +38,7 @@ function alertFingerprint(payload: AnyRecord, cooldownMinutes: number): string {
   const bucketMs = cooldownMinutes * 60 * 1000;
   const bucket = Math.floor(Date.now() / bucketMs);
   return [
-    "gold-pulse-v9",
+    "gold-pulse-v9.5",
     payload.symbol || "XAU/USD",
     d.direction || "WAIT",
     d.entryTier || "NONE",
@@ -52,11 +52,13 @@ export function buildSignalText(payload: AnyRecord): string {
   const icon = d.direction === "BUY" ? "🟢" : "🔴";
   const rr = d?.riskReward?.tp2;
   return [
-    `${icon} GOLD PULSE X v9`,
+    `${icon} GOLD PULSE X v9.5 SMART FREE`,
     "",
     `${d.direction} · ${d.entryTier || "CONFIRMED"} · ${d.mode || "TREND"}`,
     `XAU/USD · Probability ${Math.round(Number(d.targetProbability || 0))}%`,
     `Signal score ${Math.round(Number(d.signalScore || d.entryQuality || 0))}/100`,
+    `Grade ${payload?.smartFree?.confidence?.grade || "—"} · ${payload?.smartFree?.confidence?.label || "—"}`,
+    `Session ${payload?.smartFree?.session || "—"} · Regime ${payload?.smartFree?.marketRegime || "—"}`,
     "",
     `Entry ${numberText(d.entryPrice)}`,
     `TP1 ${numberText(d?.takeProfit?.tp1)} · ${Math.round(Number(d?.takeProfit?.tp1Chance || 0))}%`,
@@ -65,6 +67,9 @@ export function buildSignalText(payload: AnyRecord): string {
     `Stop Loss ${numberText(d.stopLoss)}`,
     `Risk : Reward 1:${numberText(rr)}`,
     `Holding ${d.expectedHoldingMinutes || "—"} min`,
+    "",
+    "AI Explain:",
+    ...(payload?.smartFree?.explain || d.reasons || []).slice(0, 3).map((reason: string) => `• ${reason}`),
     "",
     `Market data: ${payload.source || "provider"}`,
     `Updated: ${payload.updatedAt || new Date().toISOString()}`,

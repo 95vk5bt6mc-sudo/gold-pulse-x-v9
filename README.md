@@ -1,4 +1,4 @@
-# GOLD PULSE X v9.0 — FREE MODE
+# GOLD PULSE X v9.5 — SMART FREE
 
 โปรเจกต์จริงแบบหลายไฟล์สำหรับติดตั้งบน **GitHub + Vercel Hobby + LINE Messaging API** โดยไม่ใช้ `setup.cjs` และไม่สร้างไฟล์ระหว่าง build
 
@@ -26,7 +26,8 @@
 
 ## ค่าเริ่มต้น
 
-- Scan interval: **10 นาที**
+- Server scan: **ทุก 5 นาที เฉพาะ 08:00–24:00 ตามเวลาไทย**
+- Dashboard upstream cache: **10 นาที** เพื่อคุมแผนรวมโดยประมาณที่ 576/800 credits ต่อวัน
 - Minimum probability: **80%**
 - Minimum signal score: **70/100**
 - Alert cooldown: **30 นาที**
@@ -85,7 +86,7 @@ GOLD_PULSE_API_SECRET=ค่าเดียวกับใน Vercel
 
 ## เปลี่ยนความถี่สแกน
 
-ค่าเริ่มต้น 10 นาที
+ค่าเริ่มต้น 5 นาทีในช่วง 08:00–24:00 ตามเวลาไทย
 
 ```bash
 npm run schedule:5

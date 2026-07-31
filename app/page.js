@@ -387,6 +387,34 @@ function ScoreCard({ label, value, note }) {
   return <section className="panel mini"><p className="eyebrow">{label}</p><strong>{value}</strong><small>{note}</small></section>;
 }
 
+function SmartFreePanel({ data }) {
+  const smart = data?.smartFree;
+  const windowState = data?.tradingWindow || smart?.window;
+  if (!smart && !windowState) return null;
+  const confidence = smart?.confidence || {};
+  const stars = "★".repeat(Number(confidence.stars || 0)) + "☆".repeat(Math.max(0, 5 - Number(confidence.stars || 0)));
+  const credits = smart?.creditManager || {};
+  return (
+    <section className="panel smartFreePanel">
+      <div className="head">
+        <div><p className="eyebrow">SMART FREE CONTROL</p><h2>{windowState?.active ? "ACTIVE 08:00–24:00" : "SLEEP 00:00–08:00"}</h2></div>
+        <span className={`smartMode ${windowState?.active ? "active" : "sleep"}`}>{windowState?.session || "—"}</span>
+      </div>
+      <div className="smartFreeGrid">
+        <span>Market Regime <b>{smart?.marketRegime || "—"}</b></span>
+        <span>Confidence <b>{confidence.grade || "—"} · {stars}</b></span>
+        <span>Server Scan <b>{windowState?.active ? "ทุก 5 นาที" : "พัก"}</b></span>
+        <span>Credit Plan <b>{credits.estimatedCombinedCreditsPerDay || 576}/{credits.dailyCreditLimit || 800}</b></span>
+      </div>
+      <div className="smartExplain">
+        <p className="eyebrow">AI EXPLAIN</p>
+        {(smart?.explain?.length ? smart.explain : [windowState?.reason || "รอข้อมูลวิเคราะห์"]).slice(0, 4).map((reason) => <span key={reason}>• {reason}</span>)}
+      </div>
+      <small>ช่วงเวลาตามประเทศไทย · Server Scan สดทุก 5 นาที · Dashboard ใช้ upstream cache 10 นาที · ระบบพัก 00:00–08:00 เพื่อเก็บเครดิตไว้ใช้ช่วงที่คุณเทรด</small>
+    </section>
+  );
+}
+
 export default function Home() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -561,6 +589,8 @@ export default function Home() {
   }, []);
 
   const marketClosed = data?.market?.isOpen === false;
+  const smartSleep = data?.tradingWindow?.active === false;
+  const marketUnavailable = marketClosed || smartSleep;
   const nextOpen = data?.market?.nextOpenAt
     ? new Date(data.market.nextOpenAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", hour12: false, dateStyle: "medium", timeStyle: "short" })
     : "—";
@@ -575,27 +605,36 @@ export default function Home() {
   return (
     <main className="shell">
       <header>
-        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v9.0 FREE MODE</span></h1></div>
+        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v9.5 SMART FREE</span></h1></div>
         <button onClick={load} disabled={loading}>{loading ? "กำลังโหลด..." : "อัปเดตข้อมูล"}</button>
       </header>
-      <section className="panel lineStatus"><p className="eyebrow">LINE AUTOMATIC ALERT</p><b>CONNECTED · ENTRY signals broadcast automatically</b><small>ใช้ Token ฝั่ง Server · มี cooldown และป้องกันสัญญาณซ้ำตาม alert key</small></section>
+      <section className="panel lineStatus"><p className="eyebrow">LINE AUTOMATIC ALERT</p><b>CONNECTED · ENTRY signals push automatically</b><small>ใช้ Token ฝั่ง Server · มี cooldown และป้องกันสัญญาณซ้ำตาม alert key</small></section>
 
       {error && <div className="error"><b>ยังเชื่อมข้อมูลไม่ได้</b><span>{error}</span></div>}
 
-      {marketClosed && (
+      {marketClosed && !smartSleep && (
         <section className="panel marketClosed">
           <div><p className="eyebrow">MARKET STATUS</p><h2>MARKET CLOSED</h2><p>ตลาดทองคำ Spot ปิดช่วงสุดสัปดาห์ ระบบหยุดเรียก Twelve Data อัตโนมัติเพื่อประหยัดเครดิต</p></div>
           <div className="marketClosedMeta"><span>เหตุผล <b>WEEKEND</b></span><span>คาดว่าเปิดอีกครั้ง <b>{nextOpen}</b></span><span>API usage <b>0 credits while closed</b></span></div>
         </section>
       )}
 
+      {smartSleep && (
+        <section className="panel marketClosed smartSleepPanel">
+          <div><p className="eyebrow">AI CREDIT MANAGER</p><h2>SMART SLEEP</h2><p>นอกช่วงเทรด 08:00–24:00 ระบบ Server หยุดเรียก Twelve Data และจะกลับมาสแกนทุก 5 นาทีโดยอัตโนมัติตั้งแต่ 08:00 น.</p></div>
+          <div className="marketClosedMeta"><span>เวลาปัจจุบัน <b>{data?.tradingWindow?.localTime || "—"}</b></span><span>เริ่มทำงานอีกครั้ง <b>08:00 น.</b></span><span>API usage <b>0 credits while sleeping</b></span></div>
+        </section>
+      )}
+
       <section className="hero">
-        <section className="panel price"><p className="eyebrow">XAU/USD · LAST CLOSED CANDLE</p><strong>{latest ? fmt(latest.close) : "—"}</strong><small>{marketClosed ? `MARKET CLOSED · เปิดโดยประมาณ ${nextOpen} · ไม่เรียก API ระหว่างตลาดปิด` : `${latest?.datetime || "รอข้อมูล"} · ${sessionMode === "PAUSED" ? "พักอัตโนมัติเมื่อซ่อนหน้าเว็บ" : `ตรวจข้อมูลใน ${countdown}s`} · Smart Session ${sessionMode} · ข้อมูลตลาดใหม่ตาม Free API cache ประมาณทุก 4 นาที · ไม่ล็อกเวลาใช้งาน`}</small></section>
-        <SignalCard title="1M MODEL" data={marketClosed ? null : data?.oneMinute?.analysis} minutes={3} />
-        <SignalCard title="5M MODEL" data={marketClosed ? null : data?.fiveMinute?.analysis} minutes={15} />
+        <section className="panel price"><p className="eyebrow">XAU/USD · LAST CLOSED CANDLE</p><strong>{latest ? fmt(latest.close) : "—"}</strong><small>{marketClosed ? `MARKET CLOSED · เปิดโดยประมาณ ${nextOpen} · ไม่เรียก API ระหว่างตลาดปิด` : `${latest?.datetime || "รอข้อมูล"} · ${sessionMode === "PAUSED" ? "พักอัตโนมัติเมื่อซ่อนหน้าเว็บ" : `ตรวจข้อมูลใน ${countdown}s`} · Smart Session ${sessionMode} · ข้อมูลตลาดใหม่ตาม Free API cache ประมาณทุก 4–5 นาที · Server Scan ทุก 5 นาทีเฉพาะ 08:00–24:00`}</small></section>
+        <SignalCard title="1M MODEL" data={marketUnavailable ? null : data?.oneMinute?.analysis} minutes={3} />
+        <SignalCard title="5M MODEL" data={marketUnavailable ? null : data?.fiveMinute?.analysis} minutes={15} />
       </section>
 
-      {!marketClosed ? <>
+      <SmartFreePanel data={data} />
+
+      {!marketUnavailable ? <>
       <AlertControl settings={alertSettings} setSettings={setAlertSettings} enabled={alertState.enabled} onEnable={enableAlerts} onTest={testAlert} />
       <LineTestPanel data={data} />
 
@@ -652,11 +691,11 @@ export default function Home() {
 
       <section className="panel reasons"><p className="eyebrow">เหตุผลของโมเดล · {active === "oneMinute" ? "1M" : "5M"}</p><div className="reasonGrid">{(analysis?.reasons || ["รอข้อมูลวิเคราะห์"]).map((reason) => <div className="reason" key={reason}>{reason}</div>)}</div></section>
 
-      <section className="panel logic"><p className="eyebrow">MODEL LOGIC v9.0 SERVER ALERT</p><h2>ตัดสัญญาณอ่อนออกก่อนแสดง BUY หรือ SELL</h2><p>ระบบรองรับทั้งการเข้าแบบตามเทรนด์และสวนเทรนด์ โดยใช้ Forecast 3/5 แท่ง, EMA, RSI, ATR, MACD, ADX และตำแหน่งแนวรับแนวต้านร่วมกัน ระบบผ่อนเกณฑ์เพื่อเพิ่มความถี่ แต่จะตัดสัญญาณทันทีเมื่อคุณภาพต่ำ ความเสี่ยงสูง หรือ Forecast ไม่สอดคล้อง ผลลัพธ์เป็นการประเมินเชิงสถิติ ไม่ใช่คำแนะนำทางการเงิน และควรใช้ร่วมกับการบริหารความเสี่ยงเสมอ</p></section>
+      <section className="panel logic"><p className="eyebrow">MODEL LOGIC v9.5 SMART FREE</p><h2>ตัดสัญญาณอ่อนออกก่อนแสดง BUY หรือ SELL</h2><p>ระบบรองรับทั้งการเข้าแบบตามเทรนด์และสวนเทรนด์ โดยใช้ Forecast 3/5 แท่ง, EMA, RSI, ATR, MACD, ADX และตำแหน่งแนวรับแนวต้านร่วมกัน ระบบผ่อนเกณฑ์เพื่อเพิ่มความถี่ แต่จะตัดสัญญาณทันทีเมื่อคุณภาพต่ำ ความเสี่ยงสูง หรือ Forecast ไม่สอดคล้อง ผลลัพธ์เป็นการประเมินเชิงสถิติ ไม่ใช่คำแนะนำทางการเงิน และควรใช้ร่วมกับการบริหารความเสี่ยงเสมอ</p></section>
       </> : (
         <section className="panel closedChart">
           <p className="eyebrow">CLOSED CANDLE CHART</p>
-          <div className="empty">ตลาดปิดช่วงสุดสัปดาห์<br/><small>ระบบจะกลับมาดึงข้อมูลอัตโนมัติเมื่อ session เปิด</small></div>
+          <div className="empty">{smartSleep ? "SMART SLEEP 00:00–08:00" : "ตลาดปิดช่วงสุดสัปดาห์"}<br/><small>{smartSleep ? "ระบบจะกลับมาสแกนทุก 5 นาทีตั้งแต่ 08:00 น." : "ระบบจะกลับมาดึงข้อมูลอัตโนมัติเมื่อ session เปิด"}</small></div>
         </section>
       )}
     </main>

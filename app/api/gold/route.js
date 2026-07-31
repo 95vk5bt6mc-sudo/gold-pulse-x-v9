@@ -8,14 +8,20 @@ export const maxDuration = 60;
 
 const WINDOW_MS = 5 * 60 * 1000;
 const MAX_REQUESTS = 20;
-const DATA_TTL_MS = 240 * 1000;
+const DASHBOARD_DATA_TTL_MS = 10 * 60 * 1000;
 const STALE_TTL_MS = 20 * 60 * 1000;
 const UPSTREAM_CALLS_PER_REFRESH = 2;
 const DAILY_CREDIT_LIMIT = 800;
-const PLANNED_ACTIVE_HOURS = 23;
-const ESTIMATED_DAILY_CREDITS = Math.ceil(
-  (PLANNED_ACTIVE_HOURS * 60 * 60 * UPSTREAM_CALLS_PER_REFRESH) / (DATA_TTL_MS / 1000)
-);
+const TRADING_TIMEZONE = "Asia/Bangkok";
+const ACTIVE_START_HOUR = 8;
+const ACTIVE_END_HOUR = 24;
+const SERVER_SCAN_INTERVAL_MINUTES = 5;
+const PLANNED_ACTIVE_HOURS = ACTIVE_END_HOUR - ACTIVE_START_HOUR;
+const PLANNED_SERVER_SCANS = (PLANNED_ACTIVE_HOURS * 60) / SERVER_SCAN_INTERVAL_MINUTES;
+const PLANNED_DASHBOARD_REFRESHES = (PLANNED_ACTIVE_HOURS * 60 * 60 * 1000) / DASHBOARD_DATA_TTL_MS;
+const ESTIMATED_SERVER_CREDITS = PLANNED_SERVER_SCANS * UPSTREAM_CALLS_PER_REFRESH;
+const ESTIMATED_DASHBOARD_CREDITS = PLANNED_DASHBOARD_REFRESHES * UPSTREAM_CALLS_PER_REFRESH;
+const ESTIMATED_COMBINED_CREDITS = ESTIMATED_SERVER_CREDITS + ESTIMATED_DASHBOARD_CREDITS;
 
 const globalStore = globalThis.__goldPulseStableStore || {
   clients: new Map(),
@@ -24,6 +30,85 @@ const globalStore = globalThis.__goldPulseStableStore || {
   inFlight: null,
 };
 globalThis.__goldPulseStableStore = globalStore;
+
+function getBangkokParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TRADING_TIMEZONE,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return { weekday: map.weekday, hour: Number(map.hour), minute: Number(map.minute) };
+}
+
+function tradingWindowState(date = new Date()) {
+  const bkk = getBangkokParts(date);
+  const minuteOfDay = bkk.hour * 60 + bkk.minute;
+  const active = minuteOfDay >= ACTIVE_START_HOUR * 60 && minuteOfDay < ACTIVE_END_HOUR * 60;
+  const session = !active ? "SLEEP" : bkk.hour < 14 ? "ASIA" : bkk.hour < 19 ? "LONDON" : "NEW YORK";
+  const nextActiveAt = active
+    ? null
+    : new Date(date.getTime() + Math.max(1, ACTIVE_START_HOUR * 60 - minuteOfDay) * 60 * 1000).toISOString();
+  return {
+    active,
+    code: active ? "ACTIVE" : "SMART_SLEEP",
+    label: active ? "SMART TRADING ACTIVE" : "SMART SLEEP",
+    reason: active ? "User trading window 08:00–24:00 Thailand time" : "Outside user trading hours; provider calls paused",
+    timezone: TRADING_TIMEZONE,
+    localTime: `${String(bkk.hour).padStart(2, "0")}:${String(bkk.minute).padStart(2, "0")}`,
+    activeHours: "08:00–24:00",
+    scanIntervalMinutes: SERVER_SCAN_INTERVAL_MINUTES,
+    session,
+    sessionNote: "User-defined Thailand trading blocks",
+    nextActiveAt
+  };
+}
+
+function confidenceGrade(probability = 0, score = 0) {
+  const blended = Math.round(Number(probability || 0) * 0.65 + Number(score || 0) * 0.35);
+  if (blended >= 88) return { grade: "A+", stars: 5, label: "EXCELLENT", blended };
+  if (blended >= 80) return { grade: "A", stars: 5, label: "STRONG", blended };
+  if (blended >= 72) return { grade: "B+", stars: 4, label: "GOOD", blended };
+  if (blended >= 64) return { grade: "B", stars: 3, label: "WATCH", blended };
+  if (blended >= 55) return { grade: "C", stars: 2, label: "WEAK", blended };
+  return { grade: "D", stars: 1, label: "WAIT", blended };
+}
+
+function deriveMarketRegime(oneMinute, fiveMinute) {
+  const oneCondition = String(oneMinute?.marketCondition || "").toUpperCase();
+  const fiveCondition = String(fiveMinute?.marketCondition || "").toUpperCase();
+  const volatility = String(oneMinute?.volatility || fiveMinute?.volatility || "").toUpperCase();
+  const adx = Number(oneMinute?.indicators?.adx || fiveMinute?.indicators?.adx || 0);
+  if (volatility.includes("HIGH") || volatility.includes("VOLATILE")) return "VOLATILE";
+  if (oneCondition.includes("TREND") || fiveCondition.includes("TREND") || adx >= 25) return "TREND";
+  if (oneCondition.includes("RANGE") || fiveCondition.includes("RANGE") || adx < 18) return "RANGE";
+  return "MIXED";
+}
+
+function buildSmartFreeContext(tradeDecision, oneMinute, fiveMinute, date = new Date()) {
+  const window = tradingWindowState(date);
+  const rating = tradeDecision ? confidenceGrade(tradeDecision?.targetProbability, tradeDecision?.signalScore) : { grade: "—", stars: 0, label: window.active ? "NO DATA" : "SLEEP", blended: 0 };
+  return {
+    version: "9.5.0",
+    window,
+    session: window.session,
+    marketRegime: oneMinute || fiveMinute ? deriveMarketRegime(oneMinute, fiveMinute) : window.active ? "NO DATA" : "SLEEP",
+    confidence: rating,
+    explain: (tradeDecision?.reasons || []).slice(0, 5),
+    creditManager: {
+      mode: window.active ? "ACTIVE" : "SLEEP",
+      dailyCreditLimit: DAILY_CREDIT_LIMIT,
+      plannedServerScansPerDay: PLANNED_SERVER_SCANS,
+      upstreamCallsPerScan: UPSTREAM_CALLS_PER_REFRESH,
+      estimatedServerCreditsPerDay: ESTIMATED_SERVER_CREDITS,
+      estimatedDashboardCreditsPerDay: ESTIMATED_DASHBOARD_CREDITS,
+      estimatedCombinedCreditsPerDay: ESTIMATED_COMBINED_CREDITS,
+      estimatedReserveCredits: DAILY_CREDIT_LIMIT - ESTIMATED_COMBINED_CREDITS
+    }
+  };
+}
 
 function getNewYorkParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -308,6 +393,7 @@ function buildPayload(m1, m5, mode = "live") {
   const oneAnalysis = analyze([...m1], 5);
   const fiveAnalysis = analyze([...m5], 5);
   const tradeDecision = combinedTradeDecision(oneAnalysis, fiveAnalysis, m1.at(-1)?.close || 0);
+  const smartFree = buildSmartFreeContext(tradeDecision, oneAnalysis, fiveAnalysis);
   return {
     ok: true,
     symbol: "XAU/USD",
@@ -315,6 +401,8 @@ function buildPayload(m1, m5, mode = "live") {
     dataMode: mode,
     updatedAt: new Date().toISOString(),
     market: marketState(),
+    tradingWindow: smartFree.window,
+    smartFree,
     dataIntegrity: {
       chartSource: "raw provider OHLC",
       oneMinuteSource: "direct 1min endpoint",
@@ -325,13 +413,18 @@ function buildPayload(m1, m5, mode = "live") {
     refreshPolicy: {
       dashboardSeconds: 20,
       freeTierMode: true,
-      liveDataCacheSeconds: DATA_TTL_MS / 1000,
-      upstreamCacheSeconds: DATA_TTL_MS / 1000,
+      dashboardUpstreamCacheSeconds: DASHBOARD_DATA_TTL_MS / 1000,
+      serverScanForcesFreshProviderData: true,
       upstreamCallsPerRefresh: UPSTREAM_CALLS_PER_REFRESH,
-      estimatedCreditsPerDay: ESTIMATED_DAILY_CREDITS,
+      serverScanIntervalMinutes: SERVER_SCAN_INTERVAL_MINUTES,
+      activeHours: "08:00–24:00 Asia/Bangkok",
+      plannedServerScansPerDay: PLANNED_SERVER_SCANS,
+      estimatedServerCreditsPerDay: ESTIMATED_SERVER_CREDITS,
+      estimatedDashboardCreditsPerDay: ESTIMATED_DASHBOARD_CREDITS,
+      estimatedCombinedCreditsPerDay: ESTIMATED_COMBINED_CREDITS,
       dailyCreditLimit: DAILY_CREDIT_LIMIT,
-      estimatedReserveCredits: DAILY_CREDIT_LIMIT - ESTIMATED_DAILY_CREDITS,
-      usageMode: "smart session; no fixed time lock"
+      estimatedReserveCredits: DAILY_CREDIT_LIMIT - ESTIMATED_COMBINED_CREDITS,
+      usageMode: "smart-free active-window scheduler"
     },
     oneMinute: { candles: m1.slice(-140), analysis: oneAnalysis },
     fiveMinute: { candles: m5.slice(-140), analysis: fiveAnalysis },
@@ -340,9 +433,9 @@ function buildPayload(m1, m5, mode = "live") {
 }
 
 
-async function getFreshData(key) {
+async function getFreshData(key, { forceRefresh = false } = {}) {
   const now = Date.now();
-  if (globalStore.cache && now - globalStore.cacheAt < DATA_TTL_MS) return globalStore.cache;
+  if (!forceRefresh && globalStore.cache && now - globalStore.cacheAt < DASHBOARD_DATA_TTL_MS) return globalStore.cache;
   if (globalStore.inFlight) return globalStore.inFlight;
 
   globalStore.inFlight = (async () => {
@@ -365,6 +458,46 @@ async function getFreshData(key) {
   return globalStore.inFlight;
 }
 
+function smartSleepPayload() {
+  const window = tradingWindowState();
+  const cached = globalStore.cache;
+  if (cached) {
+    return {
+      ...cached,
+      dataMode: "smart-sleep-cache",
+      updatedAt: new Date().toISOString(),
+      market: marketState(),
+      tradingWindow: window,
+      smartFree: {
+        ...cached.smartFree,
+        window,
+        session: "SLEEP",
+        creditManager: { ...cached.smartFree?.creditManager, mode: "SLEEP" }
+      },
+      refreshPolicy: {
+        ...cached.refreshPolicy,
+        dashboardSeconds: 300,
+        upstreamCallsPerRefresh: 0,
+        estimatedCreditsWhileSleeping: 0
+      }
+    };
+  }
+  return {
+    ok: true,
+    symbol: "XAU/USD",
+    source: "Smart Free schedule",
+    dataMode: "smart-sleep",
+    updatedAt: new Date().toISOString(),
+    market: marketState(),
+    tradingWindow: window,
+    smartFree: buildSmartFreeContext(null, null, null),
+    refreshPolicy: { dashboardSeconds: 300, upstreamCallsPerRefresh: 0, estimatedCreditsWhileSleeping: 0 },
+    oneMinute: { candles: [], analysis: null },
+    fiveMinute: { candles: [], analysis: null },
+    tradeDecision: null
+  };
+}
+
 function closedMarketPayload() {
   const cached = globalStore.cache;
   if (cached) {
@@ -372,6 +505,7 @@ function closedMarketPayload() {
       ...cached,
       dataMode: "last-session-cache",
       market: marketState(),
+      tradingWindow: tradingWindowState(),
       refreshPolicy: {
         ...cached.refreshPolicy,
         upstreamCallsPerRefresh: 0,
@@ -386,13 +520,15 @@ function closedMarketPayload() {
     dataMode: "market-closed",
     updatedAt: new Date().toISOString(),
     market: marketState(),
+    tradingWindow: tradingWindowState(),
+    smartFree: buildSmartFreeContext(null, null, null),
     refreshPolicy: { dashboardSeconds: 300, upstreamCallsPerRefresh: 0 },
     oneMinute: { candles: [], analysis: null },
     fiveMinute: { candles: [], analysis: null }
   };
 }
 
-function responseHeaders(limit, cacheControl = "public, s-maxage=235, stale-while-revalidate=300") {
+function responseHeaders(limit, cacheControl = "public, s-maxage=45, stale-while-revalidate=120") {
   return {
     "Cache-Control": cacheControl,
     "X-RateLimit-Limit": String(MAX_REQUESTS),
@@ -411,6 +547,12 @@ export async function GET(request) {
     );
   }
 
+  if (!tradingWindowState().active) {
+    return NextResponse.json(smartSleepPayload(), {
+      headers: responseHeaders(limit, "public, s-maxage=300, stale-while-revalidate=600")
+    });
+  }
+
   if (!isSpotGoldOpen()) {
     return NextResponse.json(closedMarketPayload(), {
       headers: responseHeaders(limit, "public, s-maxage=300, stale-while-revalidate=600")
@@ -426,7 +568,8 @@ export async function GET(request) {
   }
 
   try {
-    const payload = await getFreshData(key);
+    const forceRefresh = request.nextUrl.searchParams.get("source") === "server-scan" || request.nextUrl.searchParams.get("manualTest") === "1";
+    const payload = await getFreshData(key, { forceRefresh });
     return NextResponse.json(payload, { headers: responseHeaders(limit) });
   } catch (error) {
     const cacheAge = Date.now() - globalStore.cacheAt;

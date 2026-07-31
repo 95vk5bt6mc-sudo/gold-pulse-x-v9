@@ -8,7 +8,7 @@ export async function GET() {
   const ready = config.marketDataConfigured && config.apiSecretConfigured && config.lineConfigured;
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v9.0 FREE MODE",
+    app: "GOLD PULSE X v9.5 SMART FREE",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -23,7 +23,18 @@ export async function GET() {
       minimumScore: config.alertMinScore,
       cooldownMinutes: config.alertCooldownMinutes
     },
-    scheduler: "GitHub Actions",
+    scheduler: "GitHub Actions · every 5 minutes · 08:00–24:00 Asia/Bangkok",
+    smartFree: {
+      timezone: "Asia/Bangkok",
+      activeHours: "08:00–24:00",
+      scanIntervalMinutes: 5,
+      plannedScansPerDay: 192,
+      estimatedServerCreditsPerDay: 384,
+      estimatedDashboardCreditsPerDay: 192,
+      estimatedCombinedCreditsPerDay: 576,
+      freeDailyCreditLimit: 800,
+      estimatedReserveCredits: 224
+    },
     serverlessStatePersistent: false,
     checkedAt: new Date().toISOString()
   }, { status: ready ? 200 : 503, headers: { "Cache-Control": "no-store" } });

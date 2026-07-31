@@ -8,7 +8,7 @@ if (![5, 10, 15].includes(minutes)) {
 }
 const file = path.join(process.cwd(), ".github", "workflows", "gold-pulse-scan.yml");
 let text = fs.readFileSync(file, "utf8");
-const cron = minutes === 5 ? "3-59/5 * * * *" : minutes === 10 ? "3-59/10 * * * *" : "3-59/15 * * * *";
+const cron = minutes === 5 ? "3-59/5 8-23 * * *" : minutes === 10 ? "3-59/10 8-23 * * *" : "3-59/15 8-23 * * *";
 text = text.replace(/cron:\s*"[^"]+"/, `cron: "${cron}"`);
 fs.writeFileSync(file, text);
-console.log(`GitHub Actions scan interval set to ${minutes} minutes (${cron}). Commit and push the workflow file.`);
+console.log(`GitHub Actions scan interval set to ${minutes} minutes during 08:00–24:00 Asia/Bangkok (${cron}, timezone Asia/Bangkok). Commit and push the workflow file.`);
