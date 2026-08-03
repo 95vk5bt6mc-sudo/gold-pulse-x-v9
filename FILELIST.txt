@@ -6,6 +6,7 @@ BUILD-REPORT-v9.7.md
 BUILD-REPORT.md
 CHANGELOG.md
 DEPLOY-IPHONE.md
+DEPLOY-v9.7-IPHONE.md
 FILELIST.txt
 README.md
 SECURITY.md
@@ -41,3 +42,6 @@ scripts/set-scan-interval.mjs
 scripts/static-check.mjs
 tsconfig.json
 vercel.json
+
+BUILD-REPORT-v9.8.md
+DEPLOY-v9.8-IPHONE.md

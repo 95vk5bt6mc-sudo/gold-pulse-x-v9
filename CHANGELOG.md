@@ -1,9 +1,13 @@
 # Changelog
 
-## 9.7.0 — Opportunity Signal
+## 9.8.0 — Scout Signal
 
-- เพิ่ม OPPORTUNITY BUY/SELL เมื่อ Forecast label ยังเป็น WAIT แต่ probability edge ตรงกับเทรนด์ 5M
-- ใช้ directional edge ขั้นต่ำ 8 จุด, probability ขั้นต่ำ 50, score ขั้นต่ำ 58 และอย่างน้อย 2 confirmations
+- แก้กรณี Forecast 3/5 เป็น WAIT แล้วระบบหยุดก่อนสร้างสัญญาณ
+- เพิ่ม SCOUT BUY/SELL โดยใช้เทรนด์ 5M, probability map, momentum, RSI และตำแหน่งราคาแบบรวมคะแนน
+- เมื่อ probability ขัดกับเทรนด์เพียงเล็กน้อย ระบบให้เทรนด์เป็นหลัก; สวนเทรนด์ได้เฉพาะ edge แข็งแรงและมีหลักฐานเพิ่ม
+- SCOUT gate: model estimate 52+, score 58+, อย่างน้อย 2 confirmations, Risk HIGH ถูกบล็อก
+- SCOUT cooldown 45 นาที เพื่อควบคุมความถี่; OPPORTUNITY 30 นาที; ACTIVE/CONFIRMED 20 นาที
+- เป้าหมายประมาณ 20 alerts/วันเป็นค่าการออกแบบ ไม่ใช่การรับประกันจำนวนหรือผลกำไร
 - คง Risk HIGH block และ cooldown 20 นาที
 - LINE ใช้ tier-specific gate เพื่อส่ง OPPORTUNITY โดยไม่ลดเกณฑ์ CONFIRMED
 - เป้าหมายคือเพิ่มโอกาสเข้าใกล้ 20 alerts ต่อวัน ไม่รับประกันจำนวนหรือผลกำไร

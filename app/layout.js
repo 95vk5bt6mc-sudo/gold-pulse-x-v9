@@ -2,7 +2,7 @@ import "./globals.css";
 import RegisterServiceWorker from "./components/RegisterServiceWorker";
 
 export const metadata = {
-  title: "GOLD PULSE X v9.7.0 Opportunity Signal",
+  title: "GOLD PULSE X v9.8.0 Opportunity Signal",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "GOLD PULSE" },
   description: "XAU/USD dashboard with server-side GitHub Actions scans and LINE alerts"

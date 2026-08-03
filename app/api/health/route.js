@@ -8,7 +8,7 @@ export async function GET() {
   const ready = config.marketDataConfigured && config.apiSecretConfigured && config.lineConfigured;
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v9.7 OPPORTUNITY SIGNAL",
+    app: "GOLD PULSE X v9.8 SCOUT SIGNAL",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -25,16 +25,20 @@ export async function GET() {
       minimumScore: config.alertMinScore,
       opportunityMinimumProbability: config.opportunityMinProbability,
       opportunityMinimumScore: config.opportunityMinScore,
+      scoutMinimumProbability: config.scoutMinProbability,
+      scoutMinimumScore: config.scoutMinScore,
       minimumDirectionalEdge: config.minimumDirectionalEdge,
-      cooldownMinutes: config.alertCooldownMinutes,
+      activeCooldownMinutes: config.alertCooldownMinutes,
+      opportunityCooldownMinutes: config.opportunityCooldownMinutes,
+      scoutCooldownMinutes: config.scoutCooldownMinutes,
       minimumConfirmations: 2,
       riskHighBlocked: true,
       targetIsEstimateNotGuarantee: true
     },
-    scheduler: "GitHub Actions · every 5 minutes · 08:00–24:00 Asia/Bangkok",
+    scheduler: "GitHub Actions | every 5 minutes | 08:00-24:00 Asia/Bangkok",
     smartFree: {
       timezone: "Asia/Bangkok",
-      activeHours: "08:00–24:00",
+      activeHours: "08:00-24:00",
       scanIntervalMinutes: 5,
       plannedScansPerDay: 192,
       estimatedServerCreditsPerDay: 384,
