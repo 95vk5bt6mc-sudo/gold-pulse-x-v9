@@ -1,6 +1,6 @@
 {
-  "name": "gold-pulse-x-v9-active-signal",
-  "version": "9.6.0",
+  "name": "gold-pulse-x-v9-opportunity-signal",
+  "version": "9.7.0",
   "private": true,
   "engines": {
     "node": ">=20.9.0"

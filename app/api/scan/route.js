@@ -20,7 +20,7 @@ async function run(request) {
   const origin = request.nextUrl.origin;
   const response = await fetch(`${origin}/api/gold?source=server-scan`, {
     cache: "no-store",
-    headers: { "user-agent": "GOLD-PULSE-v9.6-ACTIVE-SIGNAL-SCAN" }
+    headers: { "user-agent": "GOLD-PULSE-v9.7-OPPORTUNITY-SIGNAL-SCAN" }
   });
   const payload = await response.json().catch(() => ({ ok: false, message: `Market API HTTP ${response.status}` }));
 
@@ -39,7 +39,7 @@ async function run(request) {
 
   const result = {
     ok: response.ok && payload?.ok !== false,
-    version: "9.6.0",
+    version: "9.7.0",
     scannedAt: new Date().toISOString(),
     market: payload.market || null,
     source: payload.source || null,

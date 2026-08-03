@@ -91,7 +91,7 @@ function buildSmartFreeContext(tradeDecision, oneMinute, fiveMinute, date = new 
   const window = tradingWindowState(date);
   const rating = tradeDecision ? confidenceGrade(tradeDecision?.targetProbability, tradeDecision?.signalScore) : { grade: "—", stars: 0, label: window.active ? "NO DATA" : "SLEEP", blended: 0 };
   return {
-    version: "9.6.0",
+    version: "9.7.0",
     window,
     session: window.session,
     marketRegime: oneMinute || fiveMinute ? deriveMarketRegime(oneMinute, fiveMinute) : window.active ? "NO DATA" : "SLEEP",
@@ -217,10 +217,23 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   const opposite = mainTrend === "BUY" ? "SELL" : mainTrend === "SELL" ? "BUY" : "WAIT";
   const actionable = (forecast) => ["BUY", "SELL"].includes(forecast?.direction);
   const sameForecast = actionable(f3) && f3?.direction === f5?.direction;
+  const probabilityOf = (forecast, direction) => Number(
+    forecast?.probabilities?.[String(direction || "").toLowerCase()] || 0
+  );
+  const averageProbability = (direction) => Math.round(
+    (probabilityOf(f3, direction) + probabilityOf(f5, direction)) / 2
+  );
+  const buyProbability = averageProbability("BUY");
+  const sellProbability = averageProbability("SELL");
+  const waitProbability = averageProbability("WAIT");
+  const directionalEdge = Math.abs(buyProbability - sellProbability);
+  const probabilityLeader = buyProbability >= sellProbability ? "BUY" : "SELL";
+  const trendDirectionalProbability = mainTrend === "BUY" ? buyProbability : mainTrend === "SELL" ? sellProbability : 0;
+  const trendOppositeProbability = mainTrend === "BUY" ? sellProbability : mainTrend === "SELL" ? buyProbability : 0;
 
-  // v9.6 no longer requires both forecasts to agree in every case.
-  // If they conflict, prefer the forecast that agrees with the 5M trend;
-  // otherwise use the stronger forecast only when its confidence is meaningful.
+  // v9.7 keeps normal actionable forecasts, but adds a controlled trend-edge fallback.
+  // This lets the engine issue an OPPORTUNITY signal when both model labels are WAIT
+  // while their probability distribution and the 5M trend still point the same way.
   const candidates = [f3, f5].filter(actionable);
   const trendCandidate = candidates
     .filter((item) => item.direction === mainTrend)
@@ -234,16 +247,30 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
       : Number(strongestCandidate?.confidence || 0) >= 58
         ? strongestCandidate
         : null;
-  const forecastDirection = chosenForecast?.direction || "WAIT";
+  let forecastDirection = chosenForecast?.direction || "WAIT";
+  let opportunityFallback = false;
+  const trendEdge = trendDirectionalProbability - trendOppositeProbability;
+  const fallbackAllowed = ["BUY", "SELL"].includes(mainTrend) &&
+    probabilityLeader === mainTrend &&
+    trendEdge >= 8 &&
+    trendDirectionalProbability >= 30 &&
+    (trendDirectionalProbability >= waitProbability - 12 || trendEdge >= 14);
+  if (forecastDirection === "WAIT" && fallbackAllowed) {
+    forecastDirection = mainTrend;
+    opportunityFallback = true;
+  }
+
   const forecastConflict = actionable(f3) && actionable(f5) && f3.direction !== f5.direction;
   const directionProbability = (forecast, direction) => Number(
     forecast?.probabilities?.[String(direction || "").toLowerCase()] || forecast?.confidence || 0
   );
   const avgForecastProbability = forecastDirection === "WAIT"
     ? 0
-    : sameForecast
-      ? Math.round((directionProbability(f3, forecastDirection) + directionProbability(f5, forecastDirection)) / 2)
-      : Math.max(0, Math.round(directionProbability(chosenForecast, forecastDirection) - (forecastConflict ? 6 : 3)));
+    : opportunityFallback
+      ? trendDirectionalProbability
+      : sameForecast
+        ? Math.round((directionProbability(f3, forecastDirection) + directionProbability(f5, forecastDirection)) / 2)
+        : Math.max(0, Math.round(directionProbability(chosenForecast, forecastDirection) - (forecastConflict ? 6 : 3)));
 
   const atrValue = Math.max(0.01, Number(oneMinute?.indicators?.atr || 0));
   const rsi = Number(oneMinute?.indicators?.rsi || 50);
@@ -265,7 +292,8 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   const counterTrend = forecastDirection !== "WAIT" && forecastDirection === opposite && reversalSetup;
   const setupValid = trendAligned || counterTrend || momentumAligned || locationAligned;
   const riskHigh = oneMinute?.riskLevel === "HIGH";
-  const confirmationCount = [sameForecast, trendAligned, momentumAligned, locationAligned || reversalSetup]
+  const directionalConfirmation = opportunityFallback && directionalEdge >= 10;
+  const confirmationCount = [sameForecast || directionalConfirmation, trendAligned, momentumAligned, locationAligned || reversalSetup]
     .filter(Boolean).length;
 
   const historical = oneMinute?.historicalPattern;
@@ -281,6 +309,7 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   const targetMove = 1.0;
   const trendComponent = trendAligned ? Number(fiveMinute?.trendScore || 50) : counterTrend ? 100 - Number(fiveMinute?.trendScore || 50) : 50;
   const setupBonus = counterTrend && reversalSetup ? 9 : trendAligned ? 8 : momentumAligned ? 5 : locationAligned ? 4 : 0;
+  const opportunityBonus = opportunityFallback ? Math.min(12, Math.round(directionalEdge * 0.60)) : 0;
   const conflictPenalty = forecastConflict && !trendAligned ? 5 : 0;
   const rawTargetProbability = forecastDirection === "WAIT" ? 0 : Math.max(0, Math.min(95, Math.round(
     avgForecastProbability * 0.45 +
@@ -289,7 +318,7 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     trendComponent * 0.08 +
     reliability * 0.05 +
     validationQuality * 0.04 +
-    sampleQuality * 0.02 + setupBonus - conflictPenalty - (riskHigh ? 16 : 0)
+    sampleQuality * 0.02 + setupBonus + opportunityBonus - conflictPenalty - (riskHigh ? 16 : 0)
   )));
   const evidenceCap = validationSamples < 10 ? 74 : validationSamples < 20 ? 80 : validationSamples < 40 ? 85 : 90;
   const targetProbability = Math.min(rawTargetProbability, evidenceCap);
@@ -298,7 +327,13 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     trend: trendAligned ? 25 : counterTrend ? 17 : forecastDirection !== "WAIT" ? 10 : 0,
     momentum: momentumAligned ? 20 : forecastDirection !== "WAIT" ? 8 : 0,
     rsi: forecastDirection === "BUY" ? (rsi >= 46 && rsi <= 70 ? 15 : oversold ? 13 : 6) : forecastDirection === "SELL" ? (rsi >= 30 && rsi <= 54 ? 15 : overbought ? 13 : 6) : 0,
-    forecast: sameForecast ? Math.min(20, Math.round(avgForecastProbability * 0.20)) : forecastDirection !== "WAIT" ? Math.min(14, Math.round(avgForecastProbability * 0.16)) : 0,
+    forecast: sameForecast
+      ? Math.min(20, Math.round(avgForecastProbability * 0.20))
+      : opportunityFallback
+        ? Math.min(14, Math.round((avgForecastProbability + directionalEdge) * 0.18))
+        : forecastDirection !== "WAIT"
+          ? Math.min(14, Math.round(avgForecastProbability * 0.16))
+          : 0,
     pattern: Math.min(10, Math.round(((validationQuality + patternAccuracy) / 2) * 0.10)),
     volatility: expectedMoveAbs >= 1 ? 10 : expectedMoveAbs >= 0.55 ? 7 : 4,
     location: locationAligned ? 5 : 0
@@ -314,10 +349,12 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   let entryTier = "WAIT";
 
   const confirmedEntry = sameForecast && setupValid && !riskHigh && targetProbability >= 68 && signalScore >= 62 && expectedMoveAbs >= 0.50;
-  const activeEntry = forecastDirection !== "WAIT" && setupValid && !riskHigh && confirmationCount >= 2 &&
+  const activeEntry = !opportunityFallback && forecastDirection !== "WAIT" && setupValid && !riskHigh && confirmationCount >= 2 &&
     targetProbability >= 60 && signalScore >= 54 && expectedMoveAbs >= 0.45;
+  const opportunityEntry = opportunityFallback && trendAligned && momentumAligned && !riskHigh &&
+    confirmationCount >= 2 && directionalEdge >= 8 && targetProbability >= 50 && signalScore >= 58 && expectedMoveAbs >= 0.45;
 
-  if (confirmedEntry || activeEntry) {
+  if (confirmedEntry || activeEntry || opportunityEntry) {
     direction = forecastDirection;
     mode = counterTrend ? "COUNTER_TREND" : trendAligned ? "TREND" : locationAligned ? "REVERSAL_ZONE" : "MOMENTUM";
     status = "ENTRY";
@@ -327,6 +364,9 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     } else if (confirmedEntry) {
       entryTier = "CONFIRMED";
       decision = `CONFIRMED ${direction}`;
+    } else if (opportunityEntry) {
+      entryTier = "OPPORTUNITY";
+      decision = `OPPORTUNITY ${direction}`;
     } else {
       entryTier = "ACTIVE";
       decision = `ACTIVE ${direction}`;
@@ -362,19 +402,29 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   const tp1Chance = direction === "WAIT" ? 0 : Math.max(0, Math.min(92, targetProbability));
   const tp2Chance = direction === "WAIT" ? 0 : Math.max(0, Math.min(88, Math.round(targetProbability - Math.max(6, (tp2Distance - tp1Distance) * 8))));
   const tp3Chance = direction === "WAIT" ? 0 : Math.max(0, Math.min(82, Math.round(targetProbability - Math.max(13, (tp3Distance - tp1Distance) * 9))));
-  const exitAdvice = status !== "ENTRY" ? "WAIT FOR ENTRY" : entryTier === "ACTIVE" ? "ACTIVE IDEA — USE SMALLER RISK / CONFIRM CANDLE" : targetProbability < 68 || signalScore < 62 ? "EXIT / DO NOT ENTER" : momentumAligned ? "HOLD WITH TP" : "MOMENTUM WEAK — PROTECT PROFIT";
+  const exitAdvice = status !== "ENTRY"
+    ? "WAIT FOR ENTRY"
+    : ["ACTIVE", "OPPORTUNITY"].includes(entryTier)
+      ? `${entryTier} IDEA — USE SMALLER RISK / CONFIRM CANDLE`
+      : targetProbability < 68 || signalScore < 62
+        ? "EXIT / DO NOT ENTER"
+        : momentumAligned
+          ? "HOLD WITH TP"
+          : "MOMENTUM WEAK — PROTECT PROFIT";
 
   const reasons = [
     `5M main trend: ${trendBias}`,
     `3-candle forecast: ${f3?.direction || "WAIT"} ${f3?.confidence || 0}%`,
     `5-candle forecast: ${f5?.direction || "WAIT"} ${f5?.confidence || 0}%`,
-    `Selected forecast: ${forecastDirection} · ${sameForecast ? "full agreement" : forecastConflict ? "trend-weighted conflict" : "single forecast"}`,
+    `Selected forecast: ${forecastDirection} · ${sameForecast ? "full agreement" : opportunityFallback ? "5M trend + probability edge" : forecastConflict ? "trend-weighted conflict" : "single forecast"}`,
+    `Probability map BUY ${buyProbability}% · SELL ${sellProbability}% · WAIT ${waitProbability}% · edge ${directionalEdge}`,
     `Dynamic score ${signalScore}/100 · probability ${targetProbability}%`,
     `Confirmations ${confirmationCount}/4 · RSI ${Number.isFinite(rsi) ? rsi.toFixed(1) : "—"}`
   ];
   if (trendAligned) reasons.push("สัญญาณไปตามเทรนด์หลัก");
   if (counterTrend) reasons.push("พบจังหวะสวนเทรนด์พร้อมเงื่อนไขกลับตัว");
   if (entryTier === "ACTIVE") reasons.push("ผ่านเกณฑ์ ACTIVE: Probability 60, Score 54 และมีอย่างน้อย 2 confirmations");
+  if (entryTier === "OPPORTUNITY") reasons.push("ผ่านเกณฑ์ OPPORTUNITY: เทรนด์ 5M ตรงกับ probability edge, momentum สนับสนุน และมีอย่างน้อย 2 confirmations");
   if (entryTier === "CONFIRMED" || entryTier === "STRONG") reasons.push("Forecast สอดคล้องและผ่านเกณฑ์ CONFIRMED");
   if (forecastConflict) reasons.push("Forecast 3/5 ขัดกัน จึงหักคะแนนและให้น้ำหนักเทรนด์ 5M");
   if (riskHigh) reasons.push("ตัดสัญญาณเพราะความเสี่ยงสูง");
@@ -384,7 +434,9 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     mainTrend: trendBias,
     forecast3: f3 || null,
     forecast5: f5 || null,
-    forecastAgreement: sameForecast ? "FULL" : forecastConflict ? "CONFLICT_WEIGHTED" : forecastDirection !== "WAIT" ? "PARTIAL" : "NONE",
+    forecastAgreement: sameForecast ? "FULL" : opportunityFallback ? "TREND_EDGE" : forecastConflict ? "CONFLICT_WEIGHTED" : forecastDirection !== "WAIT" ? "PARTIAL" : "NONE",
+    probabilityMap: { buy: buyProbability, sell: sellProbability, wait: waitProbability, directionalEdge },
+    opportunityFallback,
     confirmationCount,
     targetDollar: targetMove,
     targetProbability,
@@ -422,7 +474,7 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     alertKey: status === "ENTRY" ? `${entryTier}:${mode}:${direction}:${m1SafeTime(oneMinute)}` : null,
     cooldownMinutes: 20,
     reasons,
-    note: "v9.6 Active Signal ตั้งเป้าเพิ่มโอกาสแจ้งเตือนประมาณ 20 ครั้งต่อวัน แต่ไม่รับประกันจำนวนหรือผลกำไร; ACTIVE ต้องตรวจยืนยันเองก่อนเข้า"
+    note: "v9.7 Opportunity Signal เพิ่ม OPPORTUNITY จากเทรนด์ 5M + probability edge เพื่อเพิ่มโอกาสเข้าใกล้ 20 alerts ต่อวัน; ทุกสัญญาณต้องตรวจยืนยันเองก่อนเข้า"
   };
 }
 function m1SafeTime(analysis) {

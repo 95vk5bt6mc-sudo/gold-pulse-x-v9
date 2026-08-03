@@ -18,10 +18,14 @@ export function evaluateAlert(payload: AnyRecord) {
   if (!config.lineConfigured) reasons.push("line-not-configured");
   if (payload?.market?.isOpen === false) reasons.push("market-closed");
   if (payload?.dataMode !== "live") reasons.push("data-not-live");
+  const opportunity = decision?.entryTier === "OPPORTUNITY";
+  const minimumProbability = opportunity ? config.opportunityMinProbability : config.alertMinProbability;
+  const minimumScore = opportunity ? config.opportunityMinScore : config.alertMinScore;
+
   if (decision?.status !== "ENTRY") reasons.push("decision-not-entry");
   if (!["BUY", "SELL"].includes(direction)) reasons.push("direction-not-actionable");
-  if (probability < config.alertMinProbability) reasons.push("probability-below-gate");
-  if (score < config.alertMinScore) reasons.push("score-below-gate");
+  if (probability < minimumProbability) reasons.push("probability-below-gate");
+  if (score < minimumScore) reasons.push("score-below-gate");
 
   return {
     eligible: reasons.length === 0,
@@ -29,6 +33,7 @@ export function evaluateAlert(payload: AnyRecord) {
     probability,
     score,
     direction,
+    appliedGate: { tier: decision?.entryTier || "UNKNOWN", minimumProbability, minimumScore },
     config
   };
 }
@@ -39,7 +44,7 @@ function alertFingerprint(payload: AnyRecord, cooldownMinutes: number): string {
   const bucket = Math.floor(Date.now() / bucketMs);
   // One alert per direction in each cooldown bucket. Tier/mode changes cannot spam LINE.
   return [
-    "gold-pulse-v9.6",
+    "gold-pulse-v9.7",
     payload.symbol || "XAU/USD",
     d.direction || "WAIT",
     bucket
@@ -50,9 +55,13 @@ export function buildSignalText(payload: AnyRecord): string {
   const d = payload.tradeDecision || {};
   const icon = d.direction === "BUY" ? "🟢" : "🔴";
   const rr = d?.riskReward?.tp2;
-  const tierLabel = d.entryTier === "ACTIVE" ? "ACTIVE ENTRY IDEA" : `${d.entryTier || "CONFIRMED"} ENTRY`;
+  const tierLabel = d.entryTier === "OPPORTUNITY"
+    ? "OPPORTUNITY ENTRY IDEA"
+    : d.entryTier === "ACTIVE"
+      ? "ACTIVE ENTRY IDEA"
+      : `${d.entryTier || "CONFIRMED"} ENTRY`;
   return [
-    `${icon} GOLD PULSE X v9.6 ACTIVE SIGNAL`,
+    `${icon} GOLD PULSE X v9.7 OPPORTUNITY SIGNAL`,
     "",
     `${d.direction} · ${tierLabel} · ${d.mode || "TREND"}`,
     `XAU/USD · Model probability ${Math.round(Number(d.targetProbability || 0))}%`,
@@ -74,8 +83,8 @@ export function buildSignalText(payload: AnyRecord): string {
     `Market data: ${payload.source || "provider"}`,
     `Updated: ${payload.updatedAt || new Date().toISOString()}`,
     "",
-    d.entryTier === "ACTIVE"
-      ? "⚠️ ACTIVE เป็นสัญญาณเชิงรุก เกณฑ์ผ่อนกว่าระดับ CONFIRMED ต้องตรวจแท่งราคาและความเสี่ยงก่อนเข้าเอง"
+    ["ACTIVE", "OPPORTUNITY"].includes(d.entryTier)
+      ? `⚠️ ${d.entryTier} เป็นสัญญาณเชิงรุก เกณฑ์ผ่อนกว่าระดับ CONFIRMED ต้องตรวจแท่งราคาและความเสี่ยงก่อนเข้าเอง`
       : "⚠️ การประเมินจากโมเดล ไม่ใช่คำแนะนำการลงทุน กรุณาตรวจสอบราคากับโบรกเกอร์และจำกัดความเสี่ยง"
   ].join("\n");
 }

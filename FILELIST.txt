@@ -2,6 +2,7 @@
 .github/workflows/gold-pulse-scan.yml
 .gitignore
 BUILD-REPORT-v9.6.md
+BUILD-REPORT-v9.7.md
 BUILD-REPORT.md
 CHANGELOG.md
 DEPLOY-IPHONE.md
@@ -39,5 +40,4 @@ scripts/doctor.mjs
 scripts/set-scan-interval.mjs
 scripts/static-check.mjs
 tsconfig.json
-tsconfig.tsbuildinfo
 vercel.json

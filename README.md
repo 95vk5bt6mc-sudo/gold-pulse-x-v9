@@ -1,4 +1,4 @@
-# GOLD PULSE X v9.6 — ACTIVE SIGNAL
+# GOLD PULSE X v9.7 — OPPORTUNITY SIGNAL
 
 โปรเจกต์จริงแบบหลายไฟล์สำหรับติดตั้งบน **GitHub + Vercel Hobby + LINE Messaging API** โดยไม่ใช้ `setup.cjs` และไม่สร้างไฟล์ระหว่าง build
 
@@ -156,7 +156,7 @@ npm run dev
 **คำเตือน:** ระบบนี้เป็นเครื่องมือวิเคราะห์เชิงทดลอง ไม่รับประกันกำไร และไม่ควรใช้แทนแผนบริหารความเสี่ยง
 
 
-## v9.6 Active Signal profile
+## v9.7 Opportunity Signal profile
 
 - เป้าหมายการออกแบบ: เพิ่มโอกาสให้ LINE มีสัญญาณราว 20 ครั้งต่อวันในช่วง 08:00–24:00
 - ไม่บังคับให้ Forecast 3 และ 5 แท่งตรงกันทุกครั้ง แต่จะหักคะแนนเมื่อขัดกัน

@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.7.0 — Opportunity Signal
+
+- เพิ่ม OPPORTUNITY BUY/SELL เมื่อ Forecast label ยังเป็น WAIT แต่ probability edge ตรงกับเทรนด์ 5M
+- ใช้ directional edge ขั้นต่ำ 8 จุด, probability ขั้นต่ำ 50, score ขั้นต่ำ 58 และอย่างน้อย 2 confirmations
+- คง Risk HIGH block และ cooldown 20 นาที
+- LINE ใช้ tier-specific gate เพื่อส่ง OPPORTUNITY โดยไม่ลดเกณฑ์ CONFIRMED
+- เป้าหมายคือเพิ่มโอกาสเข้าใกล้ 20 alerts ต่อวัน ไม่รับประกันจำนวนหรือผลกำไร
+
 ## 9.6.0 — Active Signal
 - One-shot patch from v9.5; no repository, Vercel project, LINE token, or GitHub secret recreation.
 - Added ACTIVE signal profile targeting more frequent actionable alerts during 08:00–24:00.

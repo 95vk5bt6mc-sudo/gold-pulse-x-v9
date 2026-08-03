@@ -29,7 +29,7 @@ export function getRuntimeConfig() {
   const customCooldown = integerEnv("ALERT_COOLDOWN_MINUTES", 20, 5, 240);
 
   return {
-    version: "9.6.0",
+    version: "9.7.0",
     provider: process.env.GOLD_PULSE_DATA_PROVIDER || "twelve-data",
     marketDataConfigured: Boolean(process.env.TWELVE_DATA_API_KEY),
     apiSecretConfigured: Boolean(process.env.GOLD_PULSE_API_SECRET),
@@ -39,10 +39,13 @@ export function getRuntimeConfig() {
     lineMode,
     alertsEnabled: lineEnabled,
     activeSignalMode,
-    signalProfile: activeSignalMode ? "ACTIVE_20" : "CUSTOM",
+    signalProfile: activeSignalMode ? "ACTIVE_20_OPPORTUNITY" : "CUSTOM",
     targetAlertsPerDay: integerEnv("TARGET_ALERTS_PER_DAY", 20, 5, 40),
     alertMinProbability: activeSignalMode ? 60 : customProbability,
     alertMinScore: activeSignalMode ? 54 : customScore,
+    opportunityMinProbability: activeSignalMode ? 50 : Math.max(45, customProbability - 10),
+    opportunityMinScore: activeSignalMode ? 58 : Math.max(45, customScore),
+    minimumDirectionalEdge: 8,
     alertCooldownMinutes: activeSignalMode ? 20 : customCooldown
   } as const;
 }

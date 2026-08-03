@@ -8,7 +8,7 @@ export async function GET() {
   const ready = config.marketDataConfigured && config.apiSecretConfigured && config.lineConfigured;
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v9.6 ACTIVE SIGNAL",
+    app: "GOLD PULSE X v9.7 OPPORTUNITY SIGNAL",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -23,6 +23,9 @@ export async function GET() {
     alertRules: {
       minimumProbability: config.alertMinProbability,
       minimumScore: config.alertMinScore,
+      opportunityMinimumProbability: config.opportunityMinProbability,
+      opportunityMinimumScore: config.opportunityMinScore,
+      minimumDirectionalEdge: config.minimumDirectionalEdge,
       cooldownMinutes: config.alertCooldownMinutes,
       minimumConfirmations: 2,
       riskHighBlocked: true,
