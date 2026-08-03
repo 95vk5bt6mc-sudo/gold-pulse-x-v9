@@ -1,10 +1,7 @@
 name: GOLD PULSE Server Scan
 
 on:
-  schedule:
-    - cron: "3-59/5 8-23 * * *"
-      timezone: "Asia/Bangkok"
-  workflow_dispatch:
+   workflow_dispatch:
 
 permissions:
   contents: read
