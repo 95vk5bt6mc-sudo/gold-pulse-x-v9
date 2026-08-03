@@ -1,5 +1,14 @@
 # Changelog
 
+## 9.6.0 — Active Signal
+- One-shot patch from v9.5; no repository, Vercel project, LINE token, or GitHub secret recreation.
+- Added ACTIVE signal profile targeting more frequent actionable alerts during 08:00–24:00.
+- Entry gate: model probability 60, score 54, expected move 0.45, at least 2 confirmations, and HIGH risk remains blocked.
+- Forecast 3/5 no longer must always agree; conflicts are penalized and weighted toward the 5M trend.
+- Added ACTIVE / CONFIRMED / STRONG tiers with clear LINE wording.
+- Reduced same-direction alert cooldown to 20 minutes and simplified duplicate fingerprint to reduce spam.
+- Target of roughly 20 alerts/day is an engineering goal, not a guaranteed count or verified win rate.
+
 ## 9.5.0
 - Added Smart Free active hours 08:00–24:00 Asia/Bangkok.
 - Increased scheduled server scans from 10 minutes to 5 minutes only during the active window.

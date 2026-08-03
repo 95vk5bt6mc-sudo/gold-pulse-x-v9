@@ -1,4 +1,4 @@
-# GOLD PULSE X v9.5 — SMART FREE
+# GOLD PULSE X v9.6 — ACTIVE SIGNAL
 
 โปรเจกต์จริงแบบหลายไฟล์สำหรับติดตั้งบน **GitHub + Vercel Hobby + LINE Messaging API** โดยไม่ใช้ `setup.cjs` และไม่สร้างไฟล์ระหว่าง build
 
@@ -28,9 +28,9 @@
 
 - Server scan: **ทุก 5 นาที เฉพาะ 08:00–24:00 ตามเวลาไทย**
 - Dashboard upstream cache: **10 นาที** เพื่อคุมแผนรวมโดยประมาณที่ 576/800 credits ต่อวัน
-- Minimum probability: **80%**
-- Minimum signal score: **70/100**
-- Alert cooldown: **30 นาที**
+- Active minimum probability: **60%**
+- Active minimum signal score: **54/100**
+- Alert cooldown: **20 นาที**
 - Provider: Twelve Data
 
 ## ติดตั้งแบบเร็ว
@@ -53,9 +53,11 @@ GOLD_PULSE_API_SECRET=สุ่มยาวอย่างน้อย32ตั�
 LINE_CHANNEL_ACCESS_TOKEN=...
 LINE_CHANNEL_SECRET=...
 LINE_TARGET_ID=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ALERT_MIN_PROBABILITY=80
-ALERT_MIN_SCORE=70
-ALERT_COOLDOWN_MINUTES=30
+ACTIVE_SIGNAL_MODE=true
+TARGET_ALERTS_PER_DAY=20
+ALERT_MIN_PROBABILITY=60
+ALERT_MIN_SCORE=54
+ALERT_COOLDOWN_MINUTES=20
 LINE_ALERTS_ENABLED=true
 ```
 
@@ -152,3 +154,12 @@ npm run dev
 ---
 
 **คำเตือน:** ระบบนี้เป็นเครื่องมือวิเคราะห์เชิงทดลอง ไม่รับประกันกำไร และไม่ควรใช้แทนแผนบริหารความเสี่ยง
+
+
+## v9.6 Active Signal profile
+
+- เป้าหมายการออกแบบ: เพิ่มโอกาสให้ LINE มีสัญญาณราว 20 ครั้งต่อวันในช่วง 08:00–24:00
+- ไม่บังคับให้ Forecast 3 และ 5 แท่งตรงกันทุกครั้ง แต่จะหักคะแนนเมื่อขัดกัน
+- ACTIVE ต้องมีอย่างน้อย 2 confirmations และจะไม่ผ่านเมื่อ riskLevel เป็น HIGH
+- เป้าหมาย 20 ครั้งเป็นค่าประมาณจาก logic และความถี่สแกน ไม่ใช่การรับประกัน
+- ระบบนี้ส่งเพียง Alert ไม่ได้เปิดออร์เดอร์กับโบรกเกอร์

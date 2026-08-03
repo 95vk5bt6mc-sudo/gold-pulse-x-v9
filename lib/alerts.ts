@@ -37,12 +37,11 @@ function alertFingerprint(payload: AnyRecord, cooldownMinutes: number): string {
   const d = payload.tradeDecision || {};
   const bucketMs = cooldownMinutes * 60 * 1000;
   const bucket = Math.floor(Date.now() / bucketMs);
+  // One alert per direction in each cooldown bucket. Tier/mode changes cannot spam LINE.
   return [
-    "gold-pulse-v9.5",
+    "gold-pulse-v9.6",
     payload.symbol || "XAU/USD",
     d.direction || "WAIT",
-    d.entryTier || "NONE",
-    d.mode || "NONE",
     bucket
   ].join("|");
 }
@@ -51,30 +50,33 @@ export function buildSignalText(payload: AnyRecord): string {
   const d = payload.tradeDecision || {};
   const icon = d.direction === "BUY" ? "🟢" : "🔴";
   const rr = d?.riskReward?.tp2;
+  const tierLabel = d.entryTier === "ACTIVE" ? "ACTIVE ENTRY IDEA" : `${d.entryTier || "CONFIRMED"} ENTRY`;
   return [
-    `${icon} GOLD PULSE X v9.5 SMART FREE`,
+    `${icon} GOLD PULSE X v9.6 ACTIVE SIGNAL`,
     "",
-    `${d.direction} · ${d.entryTier || "CONFIRMED"} · ${d.mode || "TREND"}`,
-    `XAU/USD · Probability ${Math.round(Number(d.targetProbability || 0))}%`,
+    `${d.direction} · ${tierLabel} · ${d.mode || "TREND"}`,
+    `XAU/USD · Model probability ${Math.round(Number(d.targetProbability || 0))}%`,
     `Signal score ${Math.round(Number(d.signalScore || d.entryQuality || 0))}/100`,
     `Grade ${payload?.smartFree?.confidence?.grade || "—"} · ${payload?.smartFree?.confidence?.label || "—"}`,
     `Session ${payload?.smartFree?.session || "—"} · Regime ${payload?.smartFree?.marketRegime || "—"}`,
     "",
-    `Entry ${numberText(d.entryPrice)}`,
+    `Entry reference ${numberText(d.entryPrice)}`,
     `TP1 ${numberText(d?.takeProfit?.tp1)} · ${Math.round(Number(d?.takeProfit?.tp1Chance || 0))}%`,
     `TP2 ${numberText(d?.takeProfit?.tp2)} · ${Math.round(Number(d?.takeProfit?.tp2Chance || 0))}%`,
     `TP3 ${numberText(d?.takeProfit?.tp3)} · ${Math.round(Number(d?.takeProfit?.tp3Chance || 0))}%`,
-    `Stop Loss ${numberText(d.stopLoss)}`,
+    `Stop Loss reference ${numberText(d.stopLoss)}`,
     `Risk : Reward 1:${numberText(rr)}`,
-    `Holding ${d.expectedHoldingMinutes || "—"} min`,
+    `Holding estimate ${d.expectedHoldingMinutes || "—"} min`,
     "",
-    "AI Explain:",
-    ...(payload?.smartFree?.explain || d.reasons || []).slice(0, 3).map((reason: string) => `• ${reason}`),
+    "Why this alert:",
+    ...(payload?.smartFree?.explain || d.reasons || []).slice(0, 4).map((reason: string) => `• ${reason}`),
     "",
     `Market data: ${payload.source || "provider"}`,
     `Updated: ${payload.updatedAt || new Date().toISOString()}`,
     "",
-    "⚠️ การประเมินจากโมเดล ไม่ใช่คำแนะนำการลงทุน กรุณาตรวจสอบราคากับโบรกเกอร์และจำกัดความเสี่ยง"
+    d.entryTier === "ACTIVE"
+      ? "⚠️ ACTIVE เป็นสัญญาณเชิงรุก เกณฑ์ผ่อนกว่าระดับ CONFIRMED ต้องตรวจแท่งราคาและความเสี่ยงก่อนเข้าเอง"
+      : "⚠️ การประเมินจากโมเดล ไม่ใช่คำแนะนำการลงทุน กรุณาตรวจสอบราคากับโบรกเกอร์และจำกัดความเสี่ยง"
   ].join("\n");
 }
 

@@ -8,7 +8,7 @@ export async function GET() {
   const ready = config.marketDataConfigured && config.apiSecretConfigured && config.lineConfigured;
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v9.5 SMART FREE",
+    app: "GOLD PULSE X v9.6 ACTIVE SIGNAL",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -18,10 +18,15 @@ export async function GET() {
     lineTargetConfigured: config.lineTargetConfigured,
     lineMode: config.lineMode,
     automaticLineAlerts: config.alertsEnabled,
+    signalProfile: config.signalProfile,
+    targetAlertsPerDay: config.targetAlertsPerDay,
     alertRules: {
       minimumProbability: config.alertMinProbability,
       minimumScore: config.alertMinScore,
-      cooldownMinutes: config.alertCooldownMinutes
+      cooldownMinutes: config.alertCooldownMinutes,
+      minimumConfirmations: 2,
+      riskHighBlocked: true,
+      targetIsEstimateNotGuarantee: true
     },
     scheduler: "GitHub Actions · every 5 minutes · 08:00–24:00 Asia/Bangkok",
     smartFree: {

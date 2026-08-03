@@ -605,7 +605,7 @@ export default function Home() {
   return (
     <main className="shell">
       <header>
-        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v9.5 SMART FREE</span></h1></div>
+        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v9.6 ACTIVE SIGNAL</span></h1></div>
         <button onClick={load} disabled={loading}>{loading ? "กำลังโหลด..." : "อัปเดตข้อมูล"}</button>
       </header>
       <section className="panel lineStatus"><p className="eyebrow">LINE AUTOMATIC ALERT</p><b>CONNECTED · ENTRY signals push automatically</b><small>ใช้ Token ฝั่ง Server · มี cooldown และป้องกันสัญญาณซ้ำตาม alert key</small></section>
@@ -691,7 +691,7 @@ export default function Home() {
 
       <section className="panel reasons"><p className="eyebrow">เหตุผลของโมเดล · {active === "oneMinute" ? "1M" : "5M"}</p><div className="reasonGrid">{(analysis?.reasons || ["รอข้อมูลวิเคราะห์"]).map((reason) => <div className="reason" key={reason}>{reason}</div>)}</div></section>
 
-      <section className="panel logic"><p className="eyebrow">MODEL LOGIC v9.5 SMART FREE</p><h2>ตัดสัญญาณอ่อนออกก่อนแสดง BUY หรือ SELL</h2><p>ระบบรองรับทั้งการเข้าแบบตามเทรนด์และสวนเทรนด์ โดยใช้ Forecast 3/5 แท่ง, EMA, RSI, ATR, MACD, ADX และตำแหน่งแนวรับแนวต้านร่วมกัน ระบบผ่อนเกณฑ์เพื่อเพิ่มความถี่ แต่จะตัดสัญญาณทันทีเมื่อคุณภาพต่ำ ความเสี่ยงสูง หรือ Forecast ไม่สอดคล้อง ผลลัพธ์เป็นการประเมินเชิงสถิติ ไม่ใช่คำแนะนำทางการเงิน และควรใช้ร่วมกับการบริหารความเสี่ยงเสมอ</p></section>
+      <section className="panel logic"><p className="eyebrow">MODEL LOGIC v9.6 ACTIVE SIGNAL</p><h2>เพิ่มโอกาสส่ง ACTIVE / CONFIRMED BUY หรือ SELL</h2><p>ระบบ v9.6 ใช้ Forecast 3/5 แท่งแบบถ่วงน้ำหนักตามเทรนด์ 5M จึงไม่ต้องรอให้ Forecast ตรงกันทุกครั้ง แบ่งเป็น ACTIVE, CONFIRMED และ STRONG พร้อมคง Risk Gate และต้องมีอย่างน้อย 2 confirmations ก่อนส่ง LINE เป้าหมายคือเพิ่มโอกาสเกิดสัญญาณประมาณ 20 ครั้งต่อวัน ไม่ใช่การรับประกันจำนวนหรือกำไร และ ACTIVE ต้องตรวจแท่งราคาก่อนเข้าเอง</p></section>
       </> : (
         <section className="panel closedChart">
           <p className="eyebrow">CLOSED CANDLE CHART</p>

@@ -1,6 +1,6 @@
 {
-  "name": "gold-pulse-x-v9-smart-free",
-  "version": "9.5.0",
+  "name": "gold-pulse-x-v9-active-signal",
+  "version": "9.6.0",
   "private": true,
   "engines": {
     "node": ">=20.9.0"

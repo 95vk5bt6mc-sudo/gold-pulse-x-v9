@@ -1,6 +1,7 @@
 .env.example
 .github/workflows/gold-pulse-scan.yml
 .gitignore
+BUILD-REPORT-v9.6.md
 BUILD-REPORT.md
 CHANGELOG.md
 DEPLOY-IPHONE.md
