@@ -1,5 +1,16 @@
 # Changelog
 
+## 10.0.0 — Pulse Engine
+
+- เพิ่ม PULSE BUY/SELL หลัง OPPORTUNITY และ SCOUT เพื่อแก้ช่วง WAIT ยาวหลายชั่วโมง
+- PULSE รวมคะแนนโหวตจาก 5M/1M trend, 5M/1M momentum, MACD, RSI, feature score และ probability map
+- PULSE gate: model estimate 52+, score 52+, อย่างน้อย 2 directional votes, expected move 0.72+, Risk HIGH ถูกบล็อก
+- PULSE cooldown 30 นาที และใช้ retry fingerprint แบบหนึ่ง PULSE ต่อ symbol ต่อ bucket แม้ทิศทางสลับ
+- TP1 ปรับให้เป็นระยะราคา XAU/USD 1.00 แบบตรงตัว
+- เพิ่มคำเตือนชัดเจนว่า price move 1.00 ไม่เท่ากับกำไรบัญชี $1 โดยอัตโนมัติ
+- เพิ่ม regression tests สำหรับเคส WAIT แบบ BEARISH/Probability conflict, BUY trend, Risk HIGH และตลาดไร้ทิศทาง
+- เป้าหมายใกล้ 20 alerts/วันเป็นค่าการออกแบบ ไม่ใช่การรับประกันจำนวนหรือผลกำไร
+
 ## 9.8.0 — Scout Signal
 
 - แก้กรณี Forecast 3/5 เป็น WAIT แล้วระบบหยุดก่อนสร้างสัญญาณ

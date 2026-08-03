@@ -18,23 +18,31 @@ export function evaluateAlert(payload: AnyRecord) {
   if (!config.lineConfigured) reasons.push("line-not-configured");
   if (payload?.market?.isOpen === false) reasons.push("market-closed");
   if (payload?.dataMode !== "live") reasons.push("data-not-live");
+
   const opportunity = decision?.entryTier === "OPPORTUNITY";
   const scout = decision?.entryTier === "SCOUT";
-  const minimumProbability = scout
-    ? config.scoutMinProbability
-    : opportunity
-      ? config.opportunityMinProbability
-      : config.alertMinProbability;
-  const minimumScore = scout
-    ? config.scoutMinScore
-    : opportunity
-      ? config.opportunityMinScore
-      : config.alertMinScore;
-  const cooldownMinutes = scout
-    ? config.scoutCooldownMinutes
-    : opportunity
-      ? config.opportunityCooldownMinutes
-      : config.alertCooldownMinutes;
+  const pulse = decision?.entryTier === "PULSE";
+  const minimumProbability = pulse
+    ? config.pulseMinProbability
+    : scout
+      ? config.scoutMinProbability
+      : opportunity
+        ? config.opportunityMinProbability
+        : config.alertMinProbability;
+  const minimumScore = pulse
+    ? config.pulseMinScore
+    : scout
+      ? config.scoutMinScore
+      : opportunity
+        ? config.opportunityMinScore
+        : config.alertMinScore;
+  const cooldownMinutes = pulse
+    ? config.pulseCooldownMinutes
+    : scout
+      ? config.scoutCooldownMinutes
+      : opportunity
+        ? config.opportunityCooldownMinutes
+        : config.alertCooldownMinutes;
 
   if (decision?.status !== "ENTRY") reasons.push("decision-not-entry");
   if (!["BUY", "SELL"].includes(direction)) reasons.push("direction-not-actionable");
@@ -57,11 +65,13 @@ function alertFingerprint(payload: AnyRecord, cooldownMinutes: number): string {
   const d = payload.tradeDecision || {};
   const bucketMs = cooldownMinutes * 60 * 1000;
   const bucket = Math.floor(Date.now() / bucketMs);
-  // One alert per direction in each cooldown bucket. Tier/mode changes cannot spam LINE.
+  // PULSE is limited to one alert per 30-minute symbol bucket even if direction
+  // flips. Higher tiers retain direction-specific retry protection.
+  const directionBucket = d.entryTier === "PULSE" ? "PULSE_ANY" : (d.direction || "WAIT");
   return [
-    "gold-pulse-v9.8",
+    "gold-pulse-v10.0",
     payload.symbol || "XAU/USD",
-    d.direction || "WAIT",
+    directionBucket,
     bucket
   ].join("|");
 }
@@ -70,24 +80,27 @@ export function buildSignalText(payload: AnyRecord): string {
   const d = payload.tradeDecision || {};
   const icon = d.direction === "BUY" ? "🟢" : "🔴";
   const rr = d?.riskReward?.tp2;
-  const tierLabel = d.entryTier === "SCOUT"
-    ? "SCOUT ENTRY IDEA"
-    : d.entryTier === "OPPORTUNITY"
-      ? "OPPORTUNITY ENTRY IDEA"
-      : d.entryTier === "ACTIVE"
-      ? "ACTIVE ENTRY IDEA"
-      : `${d.entryTier || "CONFIRMED"} ENTRY`;
+  const tierLabel = d.entryTier === "PULSE"
+    ? "PULSE ENTRY IDEA"
+    : d.entryTier === "SCOUT"
+      ? "SCOUT ENTRY IDEA"
+      : d.entryTier === "OPPORTUNITY"
+        ? "OPPORTUNITY ENTRY IDEA"
+        : d.entryTier === "ACTIVE"
+          ? "ACTIVE ENTRY IDEA"
+          : `${d.entryTier || "CONFIRMED"} ENTRY`;
+
   return [
-    `${icon} GOLD PULSE X v9.8 SCOUT SIGNAL`,
+    `${icon} GOLD PULSE X v10 PULSE ENGINE`,
     "",
     `${d.direction} · ${tierLabel} · ${d.mode || "TREND"}`,
-    `XAU/USD · Model probability ${Math.round(Number(d.targetProbability || 0))}%`,
+    `XAU/USD · Model estimate ${Math.round(Number(d.targetProbability || 0))}%`,
     `Signal score ${Math.round(Number(d.signalScore || d.entryQuality || 0))}/100`,
     `Grade ${payload?.smartFree?.confidence?.grade || "—"} · ${payload?.smartFree?.confidence?.label || "—"}`,
     `Session ${payload?.smartFree?.session || "—"} · Regime ${payload?.smartFree?.marketRegime || "—"}`,
     "",
     `Entry reference ${numberText(d.entryPrice)}`,
-    `TP1 ${numberText(d?.takeProfit?.tp1)} · ${Math.round(Number(d?.takeProfit?.tp1Chance || 0))}%`,
+    `TP1 ${numberText(d?.takeProfit?.tp1)} · target price move 1.00`,
     `TP2 ${numberText(d?.takeProfit?.tp2)} · ${Math.round(Number(d?.takeProfit?.tp2Chance || 0))}%`,
     `TP3 ${numberText(d?.takeProfit?.tp3)} · ${Math.round(Number(d?.takeProfit?.tp3Chance || 0))}%`,
     `Stop Loss reference ${numberText(d.stopLoss)}`,
@@ -95,14 +108,15 @@ export function buildSignalText(payload: AnyRecord): string {
     `Holding estimate ${d.expectedHoldingMinutes || "—"} min`,
     "",
     "Why this alert:",
-    ...(payload?.smartFree?.explain || d.reasons || []).slice(0, 4).map((reason: string) => `• ${reason}`),
+    ...(payload?.smartFree?.explain || d.reasons || []).slice(0, 5).map((reason: string) => `• ${reason}`),
     "",
     `Market data: ${payload.source || "provider"}`,
     `Updated: ${payload.updatedAt || new Date().toISOString()}`,
     "",
-    ["ACTIVE", "OPPORTUNITY", "SCOUT"].includes(d.entryTier)
-      ? `⚠️ ${d.entryTier} เป็นสัญญาณเชิงรุก เกณฑ์ผ่อนกว่าระดับ CONFIRMED ต้องตรวจแท่งราคาและความเสี่ยงก่อนเข้าเอง`
-      : "⚠️ การประเมินจากโมเดล ไม่ใช่คำแนะนำการลงทุน กรุณาตรวจสอบราคากับโบรกเกอร์และจำกัดความเสี่ยง"
+    ["ACTIVE", "OPPORTUNITY", "SCOUT", "PULSE"].includes(d.entryTier)
+      ? `⚠️ ${d.entryTier} เป็นสัญญาณเชิงรุก ต้องตรวจแท่งราคาและลดความเสี่ยงก่อนเข้าเอง`
+      : "⚠️ การประเมินจากโมเดล ไม่ใช่คำแนะนำการลงทุน กรุณาตรวจสอบราคากับโบรกเกอร์และจำกัดความเสี่ยง",
+    "⚠️ TP1 ระยะ 1.00 คือการเคลื่อนที่ของราคา XAU/USD ไม่ใช่กำไรบัญชี $1 โดยอัตโนมัติ; กำไรจริงขึ้นกับ lot, spread และ commission"
   ].join("\n");
 }
 

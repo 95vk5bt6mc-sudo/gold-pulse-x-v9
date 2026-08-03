@@ -1,4 +1,4 @@
-# GOLD PULSE X v9.8 — SCOUT SIGNAL
+# GOLD PULSE X v10.0 — PULSE ENGINE
 
 โปรเจกต์จริงแบบหลายไฟล์สำหรับติดตั้งบน **GitHub + Vercel Hobby + LINE Messaging API** โดยไม่ใช้ `setup.cjs` และไม่สร้างไฟล์ระหว่าง build
 
@@ -30,7 +30,8 @@
 - Dashboard upstream cache: **10 นาที** เพื่อคุมแผนรวมโดยประมาณที่ 576/800 credits ต่อวัน
 - Active minimum probability: **60%**
 - Active minimum signal score: **54/100**
-- Alert cooldown: **20 นาที**
+- ACTIVE/CONFIRMED cooldown: **20 นาที**
+- PULSE cooldown: **30 นาที** (สูงสุดหนึ่ง PULSE ต่อช่วงเวลาเดียวกัน)
 - Provider: Twelve Data
 
 ## ติดตั้งแบบเร็ว
@@ -156,11 +157,15 @@ npm run dev
 **คำเตือน:** ระบบนี้เป็นเครื่องมือวิเคราะห์เชิงทดลอง ไม่รับประกันกำไร และไม่ควรใช้แทนแผนบริหารความเสี่ยง
 
 
-## v9.8 Scout Signal profile
+
+## v10 Pulse Engine profile
 
 - เป้าหมายการออกแบบ: เพิ่มโอกาสให้ LINE มีสัญญาณใกล้ 20 ครั้งต่อวันในช่วง 08:00–24:00 โดยไม่รับประกันจำนวน
-- เพิ่ม SCOUT BUY/SELL เมื่อ Forecast ยังเป็น WAIT แต่เทรนด์ 5M, momentum และ directional evidence รวมกันได้อย่างน้อย 2 confirmations
-- ความขัดแย้งเล็กน้อยระหว่าง probability map กับเทรนด์จะใช้เทรนด์เป็นหลัก; จะสวนเทรนด์เมื่อ edge แข็งแรงและมี momentum/location สนับสนุน
-- ACTIVE ต้องมีอย่างน้อย 2 confirmations และจะไม่ผ่านเมื่อ riskLevel เป็น HIGH
-- เป้าหมาย 20 ครั้งเป็นค่าประมาณจาก logic และความถี่สแกน ไม่ใช่การรับประกัน
+- ลำดับสัญญาณ: STRONG → CONFIRMED → ACTIVE → OPPORTUNITY → SCOUT → PULSE → WAIT
+- PULSE ใช้คะแนนโหวตจากเทรนด์ 5M/1M, momentum 5M/1M, MACD histogram, RSI, feature score และ probability map
+- PULSE ต้องมีอย่างน้อย 2 directional votes, bias ผ่านเกณฑ์, expected move อย่างน้อย 0.72 และ Risk HIGH ต้องเป็น false
+- PULSE จำกัดหนึ่งข้อความต่อ symbol ต่อช่วง 30 นาทีด้วย LINE retry key จึงมี capacity เชิงออกแบบสูงสุดประมาณ 32 ช่วงต่อวัน ก่อนรวมสัญญาณระดับสูงกว่า
+- TP1 ถูกตั้งเป็นระยะราคา XAU/USD **1.00** จาก Entry reference
+- ระยะราคา 1.00 ไม่ได้แปลว่ากำไรในบัญชี $1 อัตโนมัติ กำไรจริงขึ้นกับ lot size, contract size, spread และ commission
 - ระบบนี้ส่งเพียง Alert ไม่ได้เปิดออร์เดอร์กับโบรกเกอร์
+- เป้าหมาย 20 ครั้งเป็นค่าการออกแบบ ไม่ใช่การรับประกันจำนวน อัตราชนะ หรือกำไร

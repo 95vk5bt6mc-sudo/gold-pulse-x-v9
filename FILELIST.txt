@@ -45,3 +45,8 @@ vercel.json
 
 BUILD-REPORT-v9.8.md
 DEPLOY-v9.8-IPHONE.md
+BUILD-REPORT-v10.0.md
+DEPLOY-v10-IPHONE.md
+lib/core/pulse-engine.js
+scripts/test-v10.mjs
+scripts/test-v10-integration.mjs

@@ -8,7 +8,7 @@ export async function GET() {
   const ready = config.marketDataConfigured && config.apiSecretConfigured && config.lineConfigured;
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v9.8 SCOUT SIGNAL",
+    app: "GOLD PULSE X v10 PULSE ENGINE",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -27,10 +27,14 @@ export async function GET() {
       opportunityMinimumScore: config.opportunityMinScore,
       scoutMinimumProbability: config.scoutMinProbability,
       scoutMinimumScore: config.scoutMinScore,
+      pulseMinimumProbability: config.pulseMinProbability,
+      pulseMinimumScore: config.pulseMinScore,
       minimumDirectionalEdge: config.minimumDirectionalEdge,
       activeCooldownMinutes: config.alertCooldownMinutes,
       opportunityCooldownMinutes: config.opportunityCooldownMinutes,
       scoutCooldownMinutes: config.scoutCooldownMinutes,
+      pulseCooldownMinutes: config.pulseCooldownMinutes,
+      pulseDesignCapacityPerDay: config.pulseDesignCapacityPerDay,
       minimumConfirmations: 2,
       riskHighBlocked: true,
       targetIsEstimateNotGuarantee: true

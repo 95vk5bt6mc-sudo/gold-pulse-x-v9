@@ -22,14 +22,19 @@ export function getRuntimeConfig() {
       ? "push"
       : "broadcast";
 
-  // ACTIVE mode deliberately overrides legacy v9.5 gates so existing Vercel values
-  // such as 80/70/30 cannot silently keep the system too restrictive after upgrade.
-  const customProbability = integerEnv("ALERT_MIN_PROBABILITY", 60, 50, 99);
+  // ACTIVE mode overrides legacy v9.5 gates so old Vercel values cannot keep
+  // the upgraded system unintentionally restrictive.
+  const customProbability = integerEnv("ALERT_MIN_PROBABILITY", 60, 45, 99);
   const customScore = integerEnv("ALERT_MIN_SCORE", 54, 40, 100);
   const customCooldown = integerEnv("ALERT_COOLDOWN_MINUTES", 20, 5, 240);
 
+  const targetAlertsPerDay = integerEnv("TARGET_ALERTS_PER_DAY", 20, 5, 40);
+  const pulseCooldownMinutes = activeSignalMode
+    ? 30
+    : integerEnv("PULSE_COOLDOWN_MINUTES", 30, 15, 120);
+
   return {
-    version: "9.8.0",
+    version: "10.0.0",
     provider: process.env.GOLD_PULSE_DATA_PROVIDER || "twelve-data",
     marketDataConfigured: Boolean(process.env.TWELVE_DATA_API_KEY),
     apiSecretConfigured: Boolean(process.env.GOLD_PULSE_API_SECRET),
@@ -39,17 +44,21 @@ export function getRuntimeConfig() {
     lineMode,
     alertsEnabled: lineEnabled,
     activeSignalMode,
-    signalProfile: activeSignalMode ? "ACTIVE_20_SCOUT" : "CUSTOM",
-    targetAlertsPerDay: integerEnv("TARGET_ALERTS_PER_DAY", 20, 5, 40),
+    signalProfile: activeSignalMode ? "ACTIVE_20_PULSE" : "CUSTOM",
+    targetAlertsPerDay,
     alertMinProbability: activeSignalMode ? 60 : customProbability,
     alertMinScore: activeSignalMode ? 54 : customScore,
     opportunityMinProbability: activeSignalMode ? 50 : Math.max(45, customProbability - 10),
     opportunityMinScore: activeSignalMode ? 58 : Math.max(45, customScore),
     scoutMinProbability: activeSignalMode ? 52 : Math.max(45, customProbability - 8),
     scoutMinScore: activeSignalMode ? 58 : Math.max(45, customScore),
+    pulseMinProbability: activeSignalMode ? 52 : Math.max(45, customProbability - 8),
+    pulseMinScore: activeSignalMode ? 52 : Math.max(45, customScore - 2),
     minimumDirectionalEdge: 8,
     alertCooldownMinutes: activeSignalMode ? 20 : customCooldown,
     opportunityCooldownMinutes: 30,
-    scoutCooldownMinutes: 45
+    scoutCooldownMinutes: 45,
+    pulseCooldownMinutes,
+    pulseDesignCapacityPerDay: Math.floor((16 * 60) / pulseCooldownMinutes)
   } as const;
 }
