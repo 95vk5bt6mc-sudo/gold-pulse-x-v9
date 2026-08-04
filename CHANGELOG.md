@@ -1,3 +1,12 @@
+# v10.3.1 — CLASSIC 9.8 PRO PLUS
+
+- Fixes stale v10.2 ALERT_MIN_* environment values overriding Classic thresholds.
+- Uses dedicated CLASSIC_* environment keys with balanced built-in defaults.
+- Adds RANGE, MIXED and COUNTER_TREND quality filters.
+- Keeps v9.8 forecast-first logic and PULSE disabled.
+- Keeps cron-job.org every 5 minutes and requires no Redis.
+- Does not force a signal count or guarantee profitability.
+
 # v10.3.0 — CLASSIC 9.8 PRO
 
 - Restores v9.8-style 5M trend and forecast-first logic.

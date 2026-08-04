@@ -91,7 +91,7 @@ function buildSmartFreeContext(tradeDecision, oneMinute, fiveMinute, date = new 
   const window = tradingWindowState(date);
   const rating = tradeDecision ? confidenceGrade(tradeDecision?.targetProbability, tradeDecision?.signalScore) : { grade: "—", stars: 0, label: window.active ? "NO DATA" : "SLEEP", blended: 0 };
   return {
-    version: "10.3.0",
+    version: "10.3.1",
     window,
     session: window.session,
     marketRegime: oneMinute || fiveMinute ? deriveMarketRegime(oneMinute, fiveMinute) : window.active ? "NO DATA" : "SLEEP",
@@ -316,7 +316,7 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     }
   }
 
-  // v10.3 CLASSIC 9.8 PRO: PULSE fallback disabled.
+  // v10.3.1 CLASSIC 9.8 PRO PLUS: PULSE fallback disabled.
 
   const forecastConflict = actionable(f3) && actionable(f5) && f3.direction !== f5.direction;
   const directionProbability = (forecast, direction) => Number(

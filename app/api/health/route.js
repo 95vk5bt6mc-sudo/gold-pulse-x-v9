@@ -5,15 +5,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const config = getRuntimeConfig();
-  const adaptiveStateReady = !config.adaptiveStateRequired || config.adaptiveStateConfigured;
   const ready = config.marketDataConfigured &&
     config.apiSecretConfigured &&
-    config.lineConfigured &&
-    adaptiveStateReady;
+    config.lineConfigured;
 
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v10.2.1 ADAPTIVE LITE",
+    app: "GOLD PULSE X v10.3.1 CLASSIC 9.8 PRO PLUS",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -27,45 +25,27 @@ export async function GET() {
     alertRules: {
       baseMinimumProbability: config.alertMinProbability,
       baseMinimumScore: config.alertMinScore,
+      confirmedMinimumProbability: config.confirmedMinProbability,
+      confirmedMinimumScore: config.confirmedMinScore,
       opportunityMinimumProbability: config.opportunityMinProbability,
       opportunityMinimumScore: config.opportunityMinScore,
       scoutMinimumProbability: config.scoutMinProbability,
       scoutMinimumScore: config.scoutMinScore,
-      pulseMinimumProbability: config.pulseMinProbability,
-      pulseMinimumScore: config.pulseMinScore,
+      pulseDisabled: true,
       minimumDirectionalEdge: config.minimumDirectionalEdge,
-      minimumConfirmations: 2,
-      scoutMinimumConfirmations: 3,
-      pulseMinimumConfirmations: 3,
+      minimumConfirmations: config.minimumConfirmations,
+      scoutMinimumConfirmations: config.scoutMinimumConfirmations,
       riskHighBlocked: true
     },
-    adaptiveCadence: {
-      enabled: config.adaptiveMode,
-      targetSignalIntervalMinutes: config.targetSignalIntervalMinutes,
-      hardThirtyMinuteLimit: false,
-      technicalMinimumGapMinutes: config.technicalMinimumGapMinutes,
-      coldStartQuality: config.adaptiveColdStartQuality,
-      eliteQualityBefore10Minutes: config.adaptiveEliteQuality,
-      earlyQuality10To20Minutes: config.adaptiveEarlyQuality,
-      targetQuality20To30Minutes: config.adaptiveTargetQuality,
-      lateQuality30To45Minutes: config.adaptiveLateQuality,
-      absoluteQualityFloor: config.adaptiveQualityFloor,
-      reversalPenalty: config.adaptiveReversalPenalty,
-      sameDirectionImprovement: config.adaptiveSameDirectionImprovement,
-      candidateExpiryMinutes: config.candidateExpiryMinutes,
-      dailySafetyCap: config.dailyAlertCap,
-      targetIsEstimateNotGuarantee: true,
-      modelEstimateIsNotVerifiedWinRate: true
-    },
-    adaptiveState: {
-      required: config.adaptiveStateRequired,
-      configured: config.adaptiveStateConfigured,
-      mode: config.adaptiveStateMode,
-      ready: adaptiveStateReady,
-      requiredEnvironmentVariables: [],
-      warning: config.adaptiveStateMode === "memory-fallback"
-        ? "No Redis: adaptive state is best-effort only. LINE idempotency limits delivery to one alert per 30-minute slot."
-        : null
+    classicQualityFilters: {
+      adaptiveCadenceEnabled: false,
+      pulseFallbackEnabled: false,
+      rangeMinimumEdge: config.rangeMinimumEdge,
+      mixedMinimumEdge: config.mixedMinimumEdge,
+      counterTrendMinimumEdge: config.counterTrendMinimumEdge,
+      deliveryGuardSlotMinutes: config.deliverySlotMinutes,
+      persistentStateRequired: false,
+      note: "Quality-first filtering. No signal is forced by time or target count."
     },
     scheduler: "cron-job.org | every 5 minutes | endpoint active 08:00-24:00 Asia/Bangkok",
     smartFree: {
