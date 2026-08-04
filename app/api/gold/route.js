@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { analyze } from "../../../lib/indicators";
 import { getProvider } from "../../../lib/providers";
-import { evaluatePulseFallback } from "../../../lib/core/pulse-engine";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -92,7 +91,7 @@ function buildSmartFreeContext(tradeDecision, oneMinute, fiveMinute, date = new 
   const window = tradingWindowState(date);
   const rating = tradeDecision ? confidenceGrade(tradeDecision?.targetProbability, tradeDecision?.signalScore) : { grade: "—", stars: 0, label: window.active ? "NO DATA" : "SLEEP", blended: 0 };
   return {
-    version: "10.2.0",
+    version: "10.3.0",
     window,
     session: window.session,
     marketRegime: oneMinute || fiveMinute ? deriveMarketRegime(oneMinute, fiveMinute) : window.active ? "NO DATA" : "SLEEP",
@@ -252,16 +251,16 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   let opportunityFallback = false;
   let scoutFallback = false;
   let scoutSource = "NONE";
-  let pulseFallback = false;
-  let pulseSource = "NONE";
-  let pulseResult = null;
+  const pulseFallback = false;
+  const pulseSource = "DISABLED_CLASSIC";
+  const pulseResult = null;
 
   // v9.7 opportunity path: forecast labels are WAIT, but 5M trend and probability leader agree.
   const opportunityAllowed = ["BUY", "SELL"].includes(mainTrend) &&
     probabilityLeader === mainTrend &&
-    trendProbabilityGap >= 8 &&
-    trendDirectionalProbability >= 30 &&
-    (trendDirectionalProbability >= waitProbability - 12 || trendProbabilityGap >= 14);
+    trendProbabilityGap >= 10 &&
+    trendDirectionalProbability >= 34 &&
+    (trendDirectionalProbability >= waitProbability - 8 || trendProbabilityGap >= 16);
   if (forecastDirection === "WAIT" && opportunityAllowed) {
     forecastDirection = mainTrend;
     opportunityFallback = true;
@@ -287,16 +286,16 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   // plus momentum/location evidence, preventing a weak 8-point conflict from flipping the direction.
   if (forecastDirection === "WAIT") {
     const mainTrendUsable = ["BUY", "SELL"].includes(mainTrend) &&
-      trendDirectionalProbability >= 22 &&
-      trendOppositeProbability - trendDirectionalProbability <= 10 &&
-      waitProbability <= 55;
+      trendDirectionalProbability >= 28 &&
+      trendOppositeProbability - trendDirectionalProbability <= 8 &&
+      waitProbability <= 50;
     const strongCounterTrend = ["BUY", "SELL"].includes(mainTrend) &&
       probabilityLeader !== mainTrend &&
-      directionalEdge >= 14 &&
-      leaderProbability >= 32 &&
+      directionalEdge >= 18 &&
+      leaderProbability >= 38 &&
       leaderMomentum &&
       (leaderLocation || directionalEdge >= 18);
-    const rangeScout = mainTrend === "WAIT" &&
+    const rangeScout = false && mainTrend === "WAIT" &&
       directionalEdge >= 10 &&
       leaderProbability >= 32 &&
       leaderMomentum &&
@@ -317,25 +316,7 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     }
   }
 
-  // v10.2 ADAPTIVE QUALITY PULSE path: when the forecast label remains WAIT, combine 5M trend,
-  // 1M/5M momentum, MACD, RSI, feature score and probability spread. This
-  // is an early directional idea with a dedicated 30-minute LINE bucket.
-  if (forecastDirection === "WAIT") {
-    pulseResult = evaluatePulseFallback({
-      oneMinute,
-      fiveMinute,
-      buyProbability,
-      sellProbability,
-      waitProbability,
-      expectedMoveAbs: pulseExpectedMoveAbs,
-      mainTrend
-    });
-    if (pulseResult.eligible) {
-      forecastDirection = pulseResult.direction;
-      pulseFallback = true;
-      pulseSource = pulseResult.source;
-    }
-  }
+  // v10.3 CLASSIC 9.8 PRO: PULSE fallback disabled.
 
   const forecastConflict = actionable(f3) && actionable(f5) && f3.direction !== f5.direction;
   const directionProbability = (forecast, direction) => Number(

@@ -1,3 +1,12 @@
+# v10.3.0 — CLASSIC 9.8 PRO
+
+- Restores v9.8-style 5M trend and forecast-first logic.
+- Disables PULSE and time-based adaptive relaxation.
+- Tightens OPPORTUNITY and SCOUT evidence.
+- Uses cron-job.org every 5 minutes; no Redis required.
+- Uses LINE retry-key as a best-effort 30-minute delivery guard.
+- Signal count and profitability are not guaranteed.
+
 # Changelog
 
 ## 10.2.0 — ADAPTIVE QUALITY 30
