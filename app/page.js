@@ -605,7 +605,7 @@ export default function Home() {
   return (
     <main className="shell">
       <header>
-        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v10.2 ADAPTIVE QUALITY</span></h1></div>
+        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v10.3.1 CLASSIC 9.8 PRO PLUS</span></h1></div>
         <button onClick={load} disabled={loading}>{loading ? "กำลังโหลด..." : "อัปเดตข้อมูล"}</button>
       </header>
       <section className="panel lineStatus"><p className="eyebrow">LINE AUTOMATIC ALERT</p><b>CONNECTED · ENTRY signals push automatically</b><small>ใช้ Token ฝั่ง Server · มี cooldown และป้องกันสัญญาณซ้ำตาม alert key</small></section>
@@ -691,7 +691,11 @@ export default function Home() {
 
       <section className="panel reasons"><p className="eyebrow">เหตุผลของโมเดล · {active === "oneMinute" ? "1M" : "5M"}</p><div className="reasonGrid">{(analysis?.reasons || ["รอข้อมูลวิเคราะห์"]).map((reason) => <div className="reason" key={reason}>{reason}</div>)}</div></section>
 
-      <section className="panel logic"><p className="eyebrow">MODEL LOGIC v10.2 ADAPTIVE QUALITY</p><h2>คัดจังหวะตามคุณภาพตลาด โดยไม่ล็อกตาย 30 นาที</h2><p>ระบบ v10.2 สแกนทุก 5 นาทีและคำนวณ Adaptive Quality จาก Probability, Signal Score, Confirmation, Directional Edge, Forecast Agreement, Expected Move และสภาพตลาด เกณฑ์จะเข้มมากหลังเพิ่งส่งสัญญาณ และค่อยผ่อนเข้าสู่จุดเป้าหมายราว 30 นาที โดยไม่บังคับให้มีออร์เดอร์และไม่บล็อกสัญญาณยอดเยี่ยมด้วยเวลาตายตัว ต้องใช้ Upstash Redis เพื่อจำสถานะข้าม Vercel Functions อย่างถูกต้อง TP1 ระยะ 1.00 หมายถึงราคาทองเคลื่อนที่ 1.00 ไม่ใช่กำไรบัญชี $1 โดยอัตโนมัติ</p></section>
+      <section className="panel logic">
+  <p className="eyebrow">MODEL LOGIC v10.3.1 CLASSIC 9.8 PRO PLUS</p>
+  <h2>ระบบ v9.8 ที่ปรับตัวกรองให้แข็งและมีคุณภาพขึ้น</h2>
+  <p>ใช้แนวโน้ม 5M และ Forecast 3/5 แท่งเป็นแกนหลัก ตรวจ Momentum, Directional Edge, Confirmation, Market Regime และความเสี่ยงก่อนส่ง LINE ปิด PULSE และไม่ผ่อนเกณฑ์เพราะรอนาน สแกนผ่าน cron-job.org ทุก 5 นาที โดยไม่ใช้ Redis และไม่รับประกันจำนวนสัญญาณหรือผลกำไร</p>
+</section>
       </> : (
         <section className="panel closedChart">
           <p className="eyebrow">CLOSED CANDLE CHART</p>
