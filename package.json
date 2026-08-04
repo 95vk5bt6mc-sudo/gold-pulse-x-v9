@@ -1,6 +1,6 @@
 {
-  "name": "gold-pulse-x-v10-pulse-engine",
-  "version": "10.0.0",
+  "name": "gold-pulse-x-v10-2-adaptive-quality-30",
+  "version": "10.2.1",
   "private": true,
   "engines": {
     "node": ">=20.9.0"
@@ -13,7 +13,8 @@
     "schedule:5": "node scripts/set-scan-interval.mjs 5",
     "schedule:10": "node scripts/set-scan-interval.mjs 10",
     "schedule:15": "node scripts/set-scan-interval.mjs 15",
-    "check": "node scripts/static-check.mjs"
+    "check": "node scripts/static-check.mjs",
+    "test:adaptive": "node scripts/test-v10.2-adaptive.mjs"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",

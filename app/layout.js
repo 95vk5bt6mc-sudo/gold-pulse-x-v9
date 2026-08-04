@@ -2,10 +2,10 @@ import "./globals.css";
 import RegisterServiceWorker from "./components/RegisterServiceWorker";
 
 export const metadata = {
-  title: "GOLD PULSE X v10.0 Pulse Engine",
+  title: "GOLD PULSE X v10.2 Adaptive Quality",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "GOLD PULSE" },
-  description: "XAU/USD dashboard with server-side GitHub Actions scans and LINE alerts"
+  description: "XAU/USD dashboard with cron-job.org scans and adaptive-quality LINE alerts"
 };
 
 export const viewport = {

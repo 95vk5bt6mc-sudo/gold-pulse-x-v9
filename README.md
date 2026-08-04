@@ -1,171 +1,92 @@
-# GOLD PULSE X v10.0 — PULSE ENGINE
+# GOLD PULSE X v10.2 — ADAPTIVE QUALITY 30
 
-โปรเจกต์จริงแบบหลายไฟล์สำหรับติดตั้งบน **GitHub + Vercel Hobby + LINE Messaging API** โดยไม่ใช้ `setup.cjs` และไม่สร้างไฟล์ระหว่าง build
+ระบบวิเคราะห์ XAU/USD ใช้ข้อมูล 1M และ 5M, สแกนผ่าน cron-job.org ทุก 5 นาที และส่ง LINE เฉพาะจังหวะที่ผ่านทั้ง Base Entry Gate และ Adaptive Quality Gate
 
-## สิ่งที่รุ่นนี้ทำได้
+## หลักการ v10.2
 
-- Dashboard XAU/USD สำหรับ iPhone และคอมพิวเตอร์
-- กราฟแท่งเทียนด้วย TradingView Lightweight Charts
-- วิเคราะห์ EMA, RSI, MACD, ATR, ADX, แนวรับ/แนวต้าน และ Pattern Engine
-- Decision Engine: BUY / SELL / WAIT พร้อม Entry, TP1–TP3, Stop Loss และ Risk:Reward
-- GitHub Actions เรียก server scan ทุก 5, 10 หรือ 15 นาที
-- ปิด Safari หรือล็อก iPhone ได้ เพราะการสแกนทำบน GitHub/Vercel
-- LINE แจ้งเตือนจาก server เท่านั้น หน้า Dashboard จะไม่ส่งสัญญาณอัตโนมัติ
-- LINE one-to-one push ผ่าน `LINE_TARGET_ID` หรือ broadcast เมื่อไม่กำหนด target
-- กันข้อความซ้ำข้าม Vercel cold start ด้วย `X-Line-Retry-Key` ของ LINE
-- PWA เพิ่มลง Home Screen ได้
+```text
+สแกนทุก 5 นาที
+→ ตรวจ Base Entry Gate
+→ คำนวณ Adaptive Quality
+→ เทียบเกณฑ์ตามเวลาจากสัญญาณล่าสุด
+→ ส่ง LINE เฉพาะจังหวะที่ผ่าน
+```
 
-## จุดที่เปลี่ยนจาก v8
+ระบบไม่มีข้อจำกัดตายตัวหนึ่งออร์เดอร์ต่อครึ่งชั่วโมง:
 
-1. ไม่มี `setup.cjs` และไม่มี `prebuild` ที่เขียนทับ repository
-2. ไฟล์ทั้งหมดเป็นไฟล์จริง แก้และดู Git diff ได้
-3. Core ฝั่ง server (`config`, `line`, `alerts`) เป็น TypeScript
-4. Dashboard ไม่สามารถกระตุ้น LINE อัตโนมัติได้อีก — ต้องผ่าน `/api/scan` ที่มี secret
-5. ระบบ LINE ใช้ retry key ป้องกันการส่งซ้ำภายในช่วง cooldown
-6. ถ้า Provider ล้ม ระบบจะ **ไม่สร้างสัญญาณปลอม** และจะไม่แจ้งเตือน
+- สัญญาณยอดเยี่ยมผ่านได้เร็ว
+- สัญญาณคุณภาพดีมีแนวโน้มผ่านใกล้ 30 นาที
+- สัญญาณอ่อนจะไม่ถูกฝืนส่ง แม้รอนาน
+- สัญญาณซ้ำทิศเดิมและกลับทิศเร็วถูกตรวจเข้มขึ้น
 
 ## ค่าเริ่มต้น
 
-- Server scan: **ทุก 5 นาที เฉพาะ 08:00–24:00 ตามเวลาไทย**
-- Dashboard upstream cache: **10 นาที** เพื่อคุมแผนรวมโดยประมาณที่ 576/800 credits ต่อวัน
-- Active minimum probability: **60%**
-- Active minimum signal score: **54/100**
-- ACTIVE/CONFIRMED cooldown: **20 นาที**
-- PULSE cooldown: **30 นาที** (สูงสุดหนึ่ง PULSE ต่อช่วงเวลาเดียวกัน)
-- Provider: Twelve Data
+| ช่วงเวลา | Adaptive Quality ขั้นต่ำ |
+|---|---:|
+| First qualified signal | 78 |
+| 0–10 นาที | 92 |
+| 10–20 นาที | 86 |
+| 20–30 นาที | 80 |
+| 30–45 นาที | 76 |
+| 45–60 นาที | 74 |
+| 60+ นาที | 72 |
 
-## ติดตั้งแบบเร็ว
+เป้าหมาย 30 นาทีเป็น cadence estimate ไม่ใช่คำสั่งว่าต้องมีออร์เดอร์ครบทุกครึ่งชั่วโมง
 
-### 1) GitHub
+## Upstash Redis จำเป็นต่อ LINE Alert
 
-สร้าง repository แล้วอัปโหลดไฟล์ทั้งหมดในโฟลเดอร์นี้
+เพิ่ม Vercel Environment Variables:
 
-> สำหรับสแกนทุก 5–15 นาทีแบบไม่เสีย Actions minutes ควรใช้ **Public repository** เพราะงานบน GitHub-hosted runner ของ public repository ไม่คิด billable minutes ส่วน private repository จะคิดอย่างน้อยหนึ่งนาทีต่อ job
+```text
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+ADAPTIVE_STATE_REQUIRED=true
+```
 
-Secrets ไม่ถูกเปิดเผยแม้ repository เป็น public ตราบใดที่เก็บไว้ใน **Settings → Secrets and variables → Actions** และไม่พิมพ์ออกใน log
+ฐานข้อมูลใช้จำเวลาส่งล่าสุด ทิศทาง Quality ราคา Entry จำนวนสัญญาณประจำวัน และ Candidate ล่าสุด
 
-### 2) Vercel
+หาก Upstash ยังไม่พร้อม ระบบจะไม่ส่ง Adaptive LINE Alert เพื่อป้องกันการส่งถี่จาก Vercel instances ที่จำสถานะร่วมกันไม่ได้
 
-Import repository เข้า Vercel แล้วเพิ่ม Environment Variables:
+## Environment หลัก
 
-```env
-TWELVE_DATA_API_KEY=...
-GOLD_PULSE_API_SECRET=สุ่มยาวอย่างน้อย32ตัวอักษร
-LINE_CHANNEL_ACCESS_TOKEN=...
-LINE_CHANNEL_SECRET=...
-LINE_TARGET_ID=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ACTIVE_SIGNAL_MODE=true
-TARGET_ALERTS_PER_DAY=20
-ALERT_MIN_PROBABILITY=60
-ALERT_MIN_SCORE=54
-ALERT_COOLDOWN_MINUTES=20
+ดูตัวอย่างทั้งหมดที่ `.env.example`
+
+```text
+TWELVE_DATA_API_KEY
+GOLD_PULSE_API_SECRET
+LINE_CHANNEL_ACCESS_TOKEN
+LINE_CHANNEL_SECRET
+LINE_TARGET_ID
 LINE_ALERTS_ENABLED=true
+ADAPTIVE_SIGNAL_MODE=true
+TARGET_SIGNAL_INTERVAL_MINUTES=30
+DAILY_ALERT_SAFETY_CAP=32
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
+ADAPTIVE_STATE_REQUIRED=true
 ```
 
-จากนั้น Deploy
+## Scheduler
 
-### 3) LINE_TARGET_ID
+- cron-job.org: ทุก 5 นาที
+- Active hours: 08:00–24:00 Asia/Bangkok
+- GitHub Actions: manual `workflow_dispatch` เท่านั้น
 
-ตั้ง Webhook URL ใน LINE Developers เป็น:
-
-```text
-https://ชื่อโปรเจกต์.vercel.app/api/line/webhook
-```
-
-เปิด Use webhook แล้วเพิ่ม Official Account เป็นเพื่อน หรือส่งคำว่า `id` หา Bot ระบบจะตอบกลับ `LINE_TARGET_ID` ของคุณ นำค่านั้นไปใส่ใน Vercel แล้ว Redeploy
-
-ไม่ใส่ `LINE_TARGET_ID` ระบบจะใช้ broadcast ไปหาเพื่อนทั้งหมดของ Official Account ซึ่งใช้โควตาข้อความมากกว่า
-
-### 4) GitHub Actions Secrets
-
-Repository → Settings → Secrets and variables → Actions
-
-```text
-GOLD_PULSE_URL=https://ชื่อโปรเจกต์.vercel.app
-GOLD_PULSE_API_SECRET=ค่าเดียวกับใน Vercel
-```
-
-ไปที่แท็บ Actions → GOLD PULSE Server Scan → Run workflow เพื่อทดสอบ
-
-## เปลี่ยนความถี่สแกน
-
-ค่าเริ่มต้น 5 นาทีในช่วง 08:00–24:00 ตามเวลาไทย
+## ตรวจระบบ
 
 ```bash
-npm run schedule:5
-npm run schedule:10
-npm run schedule:15
+node scripts/static-check.mjs
+node scripts/test-v10.mjs
+node scripts/test-v10-integration.mjs
+node scripts/test-v10.2-adaptive.mjs
 ```
 
-จากนั้น commit และ push ไฟล์ `.github/workflows/gold-pulse-scan.yml`
-
-บน iPhone สามารถแก้บรรทัด cron ใน GitHub ได้โดยตรง:
-
-```yaml
-# ทุก 5 นาที
-- cron: "3-59/5 * * * *"
-
-# ทุก 10 นาที
-- cron: "3-59/10 * * * *"
-
-# ทุก 15 นาที
-- cron: "3-59/15 * * * *"
-```
-
-ตั้งให้เริ่มนาที 3 แทนต้นชั่วโมงเพื่อลดโอกาสชนช่วงโหลดสูงของ GitHub Actions
-
-## ทดสอบ Endpoint
+Health endpoint:
 
 ```text
-/api/health      ดูว่าตั้งค่า Provider, Secret และ LINE ครบหรือไม่
-/api/provider    ดู Provider ที่เปิดใช้
-/api/system      ดู version และสถานะ scan ล่าสุดแบบ best-effort
-/api/gold        โหลดข้อมูลตลาดและ Dashboard โดยไม่ส่ง LINE
-/api/scan        server scan ที่ต้องมี x-gold-pulse-secret
-/api/notify      ส่ง LINE manual test ที่ต้องมี x-gold-pulse-secret
+/api/health
 ```
 
-## ข้อจำกัดของ Free Mode
+## คำเตือน
 
-- GitHub Actions schedule ไม่ใช่ระบบ real-time และอาจเริ่มช้ากว่าเวลาที่กำหนด
-- Vercel Hobby Cron รันถี่ 5–15 นาทีไม่ได้ จึงใช้ GitHub Actions เป็น scheduler
-- Vercel serverless memory ไม่ถาวร สถานะ scan ล่าสุดใน `/api/system` อาจรีเซ็ตหลัง cold start
-- การกัน LINE ซ้ำใช้ retry key ของ LINE ภายในช่วง cooldown และแพลตฟอร์ม LINE จัดการ retry key เป็นเวลา 24 ชั่วโมง
-- Twelve Data และ LINE มีโควตาตามแผนที่ใช้งาน
-- ราคาและสัญญาณอาจต่างจากโบรกเกอร์ เครื่องมือนี้ไม่ใช่คำแนะนำการลงทุน
-
-## Local development
-
-```bash
-cp .env.example .env.local
-npm install
-npm run doctor
-npm run dev
-```
-
-เปิด `http://localhost:3000`
-
-## เอกสารทางการ
-
-- GitHub scheduled workflows: https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#schedule
-- Vercel Cron limits: https://vercel.com/docs/cron-jobs/usage-and-pricing
-- LINE send messages: https://developers.line.biz/en/docs/messaging-api/sending-messages/
-- LINE retry key: https://developers.line.biz/en/docs/messaging-api/retrying-api-request/
-
----
-
-**คำเตือน:** ระบบนี้เป็นเครื่องมือวิเคราะห์เชิงทดลอง ไม่รับประกันกำไร และไม่ควรใช้แทนแผนบริหารความเสี่ยง
-
-
-
-## v10 Pulse Engine profile
-
-- เป้าหมายการออกแบบ: เพิ่มโอกาสให้ LINE มีสัญญาณใกล้ 20 ครั้งต่อวันในช่วง 08:00–24:00 โดยไม่รับประกันจำนวน
-- ลำดับสัญญาณ: STRONG → CONFIRMED → ACTIVE → OPPORTUNITY → SCOUT → PULSE → WAIT
-- PULSE ใช้คะแนนโหวตจากเทรนด์ 5M/1M, momentum 5M/1M, MACD histogram, RSI, feature score และ probability map
-- PULSE ต้องมีอย่างน้อย 2 directional votes, bias ผ่านเกณฑ์, expected move อย่างน้อย 0.72 และ Risk HIGH ต้องเป็น false
-- PULSE จำกัดหนึ่งข้อความต่อ symbol ต่อช่วง 30 นาทีด้วย LINE retry key จึงมี capacity เชิงออกแบบสูงสุดประมาณ 32 ช่วงต่อวัน ก่อนรวมสัญญาณระดับสูงกว่า
-- TP1 ถูกตั้งเป็นระยะราคา XAU/USD **1.00** จาก Entry reference
-- ระยะราคา 1.00 ไม่ได้แปลว่ากำไรในบัญชี $1 อัตโนมัติ กำไรจริงขึ้นกับ lot size, contract size, spread และ commission
-- ระบบนี้ส่งเพียง Alert ไม่ได้เปิดออร์เดอร์กับโบรกเกอร์
-- เป้าหมาย 20 ครั้งเป็นค่าการออกแบบ ไม่ใช่การรับประกันจำนวน อัตราชนะ หรือกำไร
+Probability และ Adaptive Quality เป็นคะแนนประเมินของระบบ ไม่ใช่อัตราชนะที่พิสูจน์แล้ว การแจ้งเตือนไม่ใช่คำแนะนำลงทุน ต้องตรวจราคาจริง สเปรด ค่าคอมมิชชัน และกำหนดความเสี่ยงเอง

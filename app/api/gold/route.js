@@ -92,7 +92,7 @@ function buildSmartFreeContext(tradeDecision, oneMinute, fiveMinute, date = new 
   const window = tradingWindowState(date);
   const rating = tradeDecision ? confidenceGrade(tradeDecision?.targetProbability, tradeDecision?.signalScore) : { grade: "—", stars: 0, label: window.active ? "NO DATA" : "SLEEP", blended: 0 };
   return {
-    version: "10.0.0",
+    version: "10.2.0",
     window,
     session: window.session,
     marketRegime: oneMinute || fiveMinute ? deriveMarketRegime(oneMinute, fiveMinute) : window.active ? "NO DATA" : "SLEEP",
@@ -317,7 +317,7 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     }
   }
 
-  // v10 PULSE path: when the forecast label remains WAIT, combine 5M trend,
+  // v10.2 ADAPTIVE QUALITY PULSE path: when the forecast label remains WAIT, combine 5M trend,
   // 1M/5M momentum, MACD, RSI, feature score and probability spread. This
   // is an early directional idea with a dedicated 30-minute LINE bucket.
   if (forecastDirection === "WAIT") {
@@ -450,21 +450,21 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   let direction = "WAIT";
   let entryTier = "WAIT";
 
-  const confirmedEntry = sameForecast && setupValid && !riskHigh && targetProbability >= 68 && signalScore >= 62 && expectedMoveAbs >= 0.50;
+  const confirmedEntry = sameForecast && setupValid && !riskHigh && targetProbability >= 70 && signalScore >= 65 && expectedMoveAbs >= 0.55;
   const activeEntry = !opportunityFallback && !scoutFallback && forecastDirection !== "WAIT" && setupValid && !riskHigh && confirmationCount >= 2 &&
-    targetProbability >= 60 && signalScore >= 54 && expectedMoveAbs >= 0.45;
+    targetProbability >= 63 && signalScore >= 58 && expectedMoveAbs >= 0.50;
   const opportunityEntry = opportunityFallback && trendAligned && momentumAligned && !riskHigh &&
-    confirmationCount >= 2 && directionalEdge >= 8 && targetProbability >= 50 && signalScore >= 58 && expectedMoveAbs >= 0.45;
-  const scoutEntry = scoutFallback && setupValid && !riskHigh && confirmationCount >= 2 &&
-    targetProbability >= 52 && signalScore >= 58 && expectedMoveAbs >= 0.45;
-  const pulseEntry = pulseFallback && !riskHigh && Number(pulseResult?.directionalVotes || 0) >= 2 &&
-    targetProbability >= 52 && signalScore >= 52 && expectedMoveAbs >= 0.72;
+    confirmationCount >= 2 && directionalEdge >= 10 && targetProbability >= 55 && signalScore >= 62 && expectedMoveAbs >= 0.55;
+  const scoutEntry = scoutFallback && setupValid && !riskHigh && confirmationCount >= 3 &&
+    targetProbability >= 57 && signalScore >= 63 && expectedMoveAbs >= 0.60;
+  const pulseEntry = pulseFallback && !riskHigh && Number(pulseResult?.directionalVotes || 0) >= 3 &&
+    targetProbability >= 58 && signalScore >= 60 && expectedMoveAbs >= 0.85;
 
   if (confirmedEntry || activeEntry || opportunityEntry || scoutEntry || pulseEntry) {
     direction = forecastDirection;
     mode = counterTrend ? "COUNTER_TREND" : trendAligned ? "TREND" : locationAligned ? "REVERSAL_ZONE" : "MOMENTUM";
     status = "ENTRY";
-    if (sameForecast && targetProbability >= 80 && signalScore >= 78) {
+    if (sameForecast && targetProbability >= 82 && signalScore >= 80) {
       entryTier = "STRONG";
       decision = `STRONG ${direction}`;
     } else if (confirmedEntry) {
@@ -537,10 +537,10 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
   ];
   if (trendAligned) reasons.push("Direction follows the 5M main trend");
   if (counterTrend) reasons.push("Counter-trend reversal evidence detected");
-  if (entryTier === "ACTIVE") reasons.push("ACTIVE gate passed: probability 60, score 54, at least 2 confirmations");
-  if (entryTier === "OPPORTUNITY") reasons.push("OPPORTUNITY gate passed: 5M trend, probability edge and momentum agree");
-  if (entryTier === "SCOUT") reasons.push("SCOUT gate passed: directional bias plus at least 2 confirmations; use reduced risk");
-  if (entryTier === "PULSE") reasons.push(`PULSE gate passed: ${pulseResult?.directionalVotes || 0} directional votes, bias ${pulseResult?.biasScore || 0}; TP1 targets a 1.00 price move`);
+  if (entryTier === "ACTIVE") reasons.push("ACTIVE gate passed: probability 63, score 58, at least 2 confirmations");
+  if (entryTier === "OPPORTUNITY") reasons.push("OPPORTUNITY gate passed: probability 55, score 62, edge 10, 5M trend and momentum agree");
+  if (entryTier === "SCOUT") reasons.push("SCOUT gate passed: probability 57, score 63 and at least 3 confirmations; use reduced risk");
+  if (entryTier === "PULSE") reasons.push(`PULSE gate passed: ${pulseResult?.directionalVotes || 0} directional votes, probability 58, score 60, bias ${pulseResult?.biasScore || 0}; TP1 targets a 1.00 price move`);
   if (["CONFIRMED", "STRONG"].includes(entryTier)) reasons.push("Forecast agreement and confirmed-entry gates passed");
   if (forecastConflict) reasons.push("Forecast 3/5 conflict: score reduced and 5M trend weighted more heavily");
   if (riskHigh) reasons.push("Signal blocked because risk is HIGH");
@@ -594,9 +594,11 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     trendAlignment: trendAligned ? Math.round(((oneMinute?.trendScore || 0) + (fiveMinute?.trendScore || 0)) / 2) : counterTrend ? Math.round(100 - ((oneMinute?.trendScore || 0) + (fiveMinute?.trendScore || 0)) / 2) : 0,
     estimatedCandles: expectedMoveAbs > 0 ? Math.max(1, Math.min(12, Math.ceil(targetMove / Math.max(atrValue * 0.45, 0.05)))) : null,
     alertKey: status === "ENTRY" ? `${entryTier}:${mode}:${direction}:${m1SafeTime(oneMinute)}` : null,
-    cooldownMinutes: entryTier === "PULSE" ? 30 : entryTier === "SCOUT" ? 45 : entryTier === "OPPORTUNITY" ? 30 : 20,
+    cooldownMinutes: null,
+    targetSignalIntervalMinutes: 30,
+    adaptiveCadence: true,
     reasons,
-    note: "v10 Pulse Engine combines trend, momentum, MACD, RSI and probability votes when forecasts remain WAIT. PULSE is an early signal, not a guaranteed trade. TP1 means a 1.00 XAU/USD price move, not automatically $1 account profit."
+    note: "v10.2 scans every 5 minutes and uses a persistent adaptive-quality gate. There is no fixed 30-minute lock: exceptional signals can pass early, ordinary good signals tend to pass near the 30-minute target, and weak signals are never forced. TP1 means a 1.00 XAU/USD price move, not automatically $1 account profit."
   };
 }
 function m1SafeTime(analysis) {

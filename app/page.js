@@ -605,7 +605,7 @@ export default function Home() {
   return (
     <main className="shell">
       <header>
-        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v10 PULSE ENGINE</span></h1></div>
+        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v10.2 ADAPTIVE QUALITY</span></h1></div>
         <button onClick={load} disabled={loading}>{loading ? "กำลังโหลด..." : "อัปเดตข้อมูล"}</button>
       </header>
       <section className="panel lineStatus"><p className="eyebrow">LINE AUTOMATIC ALERT</p><b>CONNECTED · ENTRY signals push automatically</b><small>ใช้ Token ฝั่ง Server · มี cooldown และป้องกันสัญญาณซ้ำตาม alert key</small></section>
@@ -691,7 +691,7 @@ export default function Home() {
 
       <section className="panel reasons"><p className="eyebrow">เหตุผลของโมเดล · {active === "oneMinute" ? "1M" : "5M"}</p><div className="reasonGrid">{(analysis?.reasons || ["รอข้อมูลวิเคราะห์"]).map((reason) => <div className="reason" key={reason}>{reason}</div>)}</div></section>
 
-      <section className="panel logic"><p className="eyebrow">MODEL LOGIC v10 PULSE ENGINE</p><h2>เพิ่ม PULSE BUY/SELL เพื่อให้มีโอกาสแจ้งเตือนสม่ำเสมอขึ้น</h2><p>ระบบ v10 เพิ่ม PULSE SIGNAL เมื่อ Forecast ยังเป็น WAIT โดยรวมคะแนนจากเทรนด์ 5M/1M, momentum, MACD, RSI, feature score และ probability map ต้องมีอย่างน้อย 2 directional votes, ไม่ส่งเมื่อ Risk HIGH และจำกัด PULSE สูงสุดหนึ่งครั้งต่อช่วง 30 นาที เป้าหมายคือเพิ่มโอกาสเข้าใกล้ 20 alerts ต่อวัน ไม่ใช่การรับประกันจำนวนหรือกำไร TP1 ระยะ 1.00 หมายถึงราคาทองเคลื่อนที่ 1.00 ไม่ใช่กำไรบัญชี $1 โดยอัตโนมัติ</p></section>
+      <section className="panel logic"><p className="eyebrow">MODEL LOGIC v10.2 ADAPTIVE QUALITY</p><h2>คัดจังหวะตามคุณภาพตลาด โดยไม่ล็อกตาย 30 นาที</h2><p>ระบบ v10.2 สแกนทุก 5 นาทีและคำนวณ Adaptive Quality จาก Probability, Signal Score, Confirmation, Directional Edge, Forecast Agreement, Expected Move และสภาพตลาด เกณฑ์จะเข้มมากหลังเพิ่งส่งสัญญาณ และค่อยผ่อนเข้าสู่จุดเป้าหมายราว 30 นาที โดยไม่บังคับให้มีออร์เดอร์และไม่บล็อกสัญญาณยอดเยี่ยมด้วยเวลาตายตัว ต้องใช้ Upstash Redis เพื่อจำสถานะข้าม Vercel Functions อย่างถูกต้อง TP1 ระยะ 1.00 หมายถึงราคาทองเคลื่อนที่ 1.00 ไม่ใช่กำไรบัญชี $1 โดยอัตโนมัติ</p></section>
       </> : (
         <section className="panel closedChart">
           <p className="eyebrow">CLOSED CANDLE CHART</p>

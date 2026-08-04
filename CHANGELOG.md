@@ -1,5 +1,26 @@
 # Changelog
 
+## 10.2.0 — ADAPTIVE QUALITY 30
+
+- Removed the fixed GLOBAL_30 LINE retry bucket.
+- Added persistent adaptive timing with Upstash Redis.
+- Added time-sensitive quality thresholds targeting roughly 30-minute cadence.
+- Exceptional high-quality signals can pass before 30 minutes.
+- Weak signals remain blocked even after long waits.
+- Added reversal penalty, same-direction freshness rule and daily safety cap.
+- Added adaptive unit tests, health diagnostics and iPhone deployment guide.
+- LINE alerts pause safely when persistent state is required but unconfigured.
+
+## 10.1.0 — BALANCED 30
+
+- Global LINE limit: one accepted alert per fixed 30-minute window across every tier and direction.
+- ACTIVE gate: probability 63, score 58.
+- OPPORTUNITY gate: probability 55, score 62, directional edge 10.
+- SCOUT gate: probability 57, score 63, three confirmations.
+- PULSE gate: probability 58, score 60, three directional votes, expected move 0.85.
+- Risk HIGH remains blocked.
+- Scheduler label updated to cron-job.org every 5 minutes.
+
 ## 10.0.0 — Pulse Engine
 
 - เพิ่ม PULSE BUY/SELL หลัง OPPORTUNITY และ SCOUT เพื่อแก้ช่วง WAIT ยาวหลายชั่วโมง
