@@ -23,7 +23,7 @@ export function getRuntimeConfig() {
       : "broadcast";
 
   return {
-    version: "10.3.1",
+    version: "11.0.0",
     provider: process.env.GOLD_PULSE_DATA_PROVIDER || "twelve-data",
     marketDataConfigured: Boolean(process.env.TWELVE_DATA_API_KEY),
     apiSecretConfigured: Boolean(process.env.GOLD_PULSE_API_SECRET),
@@ -35,7 +35,7 @@ export function getRuntimeConfig() {
     activeSignalMode: classicMode,
     classicMode,
     adaptiveMode: false,
-    signalProfile: classicMode ? "CLASSIC_98_PRO_PLUS" : "CUSTOM",
+    signalProfile: classicMode ? "PATTERN_INTELLIGENCE_5M" : "CUSTOM",
 
     // ใช้ชื่อ Environment Variable ชุดใหม่ เพื่อไม่ให้ค่าเก่า 80/70 จาก v10.2 มาทับระบบ Classic
     alertMinProbability: integerEnv("CLASSIC_BASE_MIN_PROBABILITY", 61, 55, 85),

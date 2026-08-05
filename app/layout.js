@@ -2,10 +2,10 @@ import "./globals.css";
 import RegisterServiceWorker from "./components/RegisterServiceWorker";
 
 export const metadata = {
-  title: "GOLD PULSE X v10.3.1 Adaptive Quality",
+  title: "GOLD PULSE X v11 Pattern Intelligence 5M",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "GOLD PULSE" },
-  description: "XAU/USD Classic 9.8 Pro Plus dashboard with cron-job.org scans and quality-first LINE alerts"
+  description: "XAU/USD Classic 9.8 Pro Plus with 5M pattern memory, divergence, fake-breakout and market-structure analysis"
 };
 
 export const viewport = {

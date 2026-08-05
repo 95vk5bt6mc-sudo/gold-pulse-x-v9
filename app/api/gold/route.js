@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { analyze } from "../../../lib/indicators";
 import { getProvider } from "../../../lib/providers";
+import { analyzeFiveMinuteIntelligence, applyFiveMinuteIntelligenceOverlay } from "../../../lib/intelligence/five-minute-intelligence";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -91,7 +92,7 @@ function buildSmartFreeContext(tradeDecision, oneMinute, fiveMinute, date = new 
   const window = tradingWindowState(date);
   const rating = tradeDecision ? confidenceGrade(tradeDecision?.targetProbability, tradeDecision?.signalScore) : { grade: "—", stars: 0, label: window.active ? "NO DATA" : "SLEEP", blended: 0 };
   return {
-    version: "10.3.1",
+    version: "11.0.0",
     window,
     session: window.session,
     marketRegime: oneMinute || fiveMinute ? deriveMarketRegime(oneMinute, fiveMinute) : window.active ? "NO DATA" : "SLEEP",
@@ -577,9 +578,10 @@ function combinedTradeDecision(oneMinute, fiveMinute, price) {
     alertKey: status === "ENTRY" ? `${entryTier}:${mode}:${direction}:${m1SafeTime(oneMinute)}` : null,
     cooldownMinutes: null,
     targetSignalIntervalMinutes: 30,
-    adaptiveCadence: true,
+    adaptiveCadence: false,
+    patternIntelligenceEnabled: true,
     reasons,
-    note: "v10.2 scans every 5 minutes and uses a persistent adaptive-quality gate. There is no fixed 30-minute lock: exceptional signals can pass early, ordinary good signals tend to pass near the 30-minute target, and weak signals are never forced. TP1 means a 1.00 XAU/USD price move, not automatically $1 account profit."
+    note: "v11 ใช้ Classic 9.8 Pro Plus ร่วมกับ 5M Pattern Intelligence, divergence, liquidity sweep, fake-breakout และ market-structure overlay. Pattern memory ในรอบสดใช้ข้อมูลที่ provider โหลดมา ไม่ใช่คลังหลายล้านรูปแบบและไม่รับประกันกำไร."
   };
 }
 function m1SafeTime(analysis) {
@@ -589,7 +591,9 @@ function m1SafeTime(analysis) {
 function buildPayload(m1, m5, mode = "live") {
   const oneAnalysis = analyze([...m1], 5);
   const fiveAnalysis = analyze([...m5], 5);
-  const tradeDecision = combinedTradeDecision(oneAnalysis, fiveAnalysis, m1.at(-1)?.close || 0);
+  const fiveMinuteIntelligence = analyzeFiveMinuteIntelligence(m5);
+  const baseTradeDecision = combinedTradeDecision(oneAnalysis, fiveAnalysis, m1.at(-1)?.close || 0);
+  const tradeDecision = applyFiveMinuteIntelligenceOverlay(baseTradeDecision, fiveMinuteIntelligence);
   const smartFree = buildSmartFreeContext(tradeDecision, oneAnalysis, fiveAnalysis);
   return {
     ok: true,
@@ -625,6 +629,7 @@ function buildPayload(m1, m5, mode = "live") {
     },
     oneMinute: { candles: m1.slice(-140), analysis: oneAnalysis },
     fiveMinute: { candles: m5.slice(-140), analysis: fiveAnalysis },
+    fiveMinuteIntelligence,
     tradeDecision
   };
 }

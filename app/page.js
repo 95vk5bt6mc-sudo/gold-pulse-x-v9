@@ -605,7 +605,7 @@ export default function Home() {
   return (
     <main className="shell">
       <header>
-        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v10.3.1 CLASSIC 9.8 PRO PLUS</span></h1></div>
+        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v11 PATTERN INTELLIGENCE 5M</span></h1></div>
         <button onClick={load} disabled={loading}>{loading ? "กำลังโหลด..." : "อัปเดตข้อมูล"}</button>
       </header>
       <section className="panel lineStatus"><p className="eyebrow">LINE AUTOMATIC ALERT</p><b>CONNECTED · ENTRY signals push automatically</b><small>ใช้ Token ฝั่ง Server · มี cooldown และป้องกันสัญญาณซ้ำตาม alert key</small></section>
@@ -689,13 +689,44 @@ export default function Home() {
         </aside>
       </section>
 
+      {data?.fiveMinuteIntelligence?.ready && (
+        <section className="panel historyPanel">
+          <div className="head">
+            <div>
+              <p className="eyebrow">5M PATTERN INTELLIGENCE</p>
+              <h2>Candle DNA · Divergence · Fake Breakout · Structure</h2>
+            </div>
+            <span className="reliability">Trap risk {data.fiveMinuteIntelligence.trapRisk || 0}%</span>
+          </div>
+          <div className="historyStats">
+            <span>Bias <b>{data.fiveMinuteIntelligence.bias?.direction || "WAIT"}</b></span>
+            <span>Similarity <b>{data.fiveMinuteIntelligence.patternMemory?.averageSimilarity || 0}%</b></span>
+            <span>Matches <b>{data.fiveMinuteIntelligence.patternMemory?.matchedCases || 0}</b></span>
+            <span>Divergence <b>{data.fiveMinuteIntelligence.divergence?.strongest?.type || "NONE"}</b></span>
+            <span>Fake breakout <b>{data.fiveMinuteIntelligence.fakeBreakout?.direction || "NONE"}</b></span>
+            <span>Structure <b>{data.fiveMinuteIntelligence.marketStructure?.event || "NONE"}</b></span>
+          </div>
+          <div className="forecastGrid">
+            {(data.fiveMinuteIntelligence.patternMemory?.forecasts || []).map((item) => (
+              <div className={`forecast ${directionClass(item.direction)}`} key={`intelligence-${item.candle}`}>
+                <small>NEXT {item.minutesAhead} MIN</small>
+                <strong>{item.direction}</strong>
+                <b>{item.confidence}%</b>
+                <div className="prob">
+                  <span>U {item.probabilities?.up || 0}</span>
+                  <span>D {item.probabilities?.down || 0}</span>
+                  <span>W {item.probabilities?.sideway || 0}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <small>Live memory ใช้แท่ง 5M ที่โหลดในรอบปัจจุบัน จึงเป็น Foundation ก่อนเชื่อมคลังข้อมูลหลายปี</small>
+        </section>
+      )}
+
       <section className="panel reasons"><p className="eyebrow">เหตุผลของโมเดล · {active === "oneMinute" ? "1M" : "5M"}</p><div className="reasonGrid">{(analysis?.reasons || ["รอข้อมูลวิเคราะห์"]).map((reason) => <div className="reason" key={reason}>{reason}</div>)}</div></section>
 
-      <section className="panel logic">
-  <p className="eyebrow">MODEL LOGIC v10.3.1 CLASSIC 9.8 PRO PLUS</p>
-  <h2>ระบบ v9.8 ที่ปรับตัวกรองให้แข็งและมีคุณภาพขึ้น</h2>
-  <p>ใช้แนวโน้ม 5M และ Forecast 3/5 แท่งเป็นแกนหลัก ตรวจ Momentum, Directional Edge, Confirmation, Market Regime และความเสี่ยงก่อนส่ง LINE ปิด PULSE และไม่ผ่อนเกณฑ์เพราะรอนาน สแกนผ่าน cron-job.org ทุก 5 นาที โดยไม่ใช้ Redis และไม่รับประกันจำนวนสัญญาณหรือผลกำไร</p>
-</section>
+      <section className="panel logic"><p className="eyebrow">MODEL LOGIC v11 PATTERN INTELLIGENCE 5M</p><h2>ประเมินแท่ง 5 นาทีด้วย Pattern Memory และตัวกรองกับดักตลาด</h2><p>ใช้ Classic 9.8 Pro Plus เป็นฐาน แล้วเพิ่ม Candle DNA similarity, RSI/MACD divergence, liquidity sweep, fake breakout และ BOS/CHOCH ระบบจะแสดงความน่าจะเป็นของอีก 5, 10 และ 15 นาที และบล็อก ENTRY เมื่อพบกับดักหรือ divergence ฝั่งตรงข้ามที่แข็งแรง ข้อมูลสดยังจำกัดตามจำนวนแท่งที่ provider โหลดในแต่ละรอบ ไม่ใช่คลังหลายล้านรูปแบบและไม่รับประกันกำไร</p></section>
       </> : (
         <section className="panel closedChart">
           <p className="eyebrow">CLOSED CANDLE CHART</p>

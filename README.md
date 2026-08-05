@@ -1,17 +1,22 @@
-# GOLD PULSE X v10.3.1 — CLASSIC 9.8 PRO PLUS
+# GOLD PULSE X v11.0 — PATTERN INTELLIGENCE 5M
 
-ระบบวิเคราะห์ XAU/USD ใช้ข้อมูล 1M และ 5M โดยใช้แนวคิดของ v9.8 เป็นแกนหลัก และปรับตัวกรองคุณภาพให้เข้มขึ้น
+ระบบใช้ Classic 9.8 Pro Plus เป็นฐาน และเพิ่มการวิเคราะห์แท่ง 5 นาทีแบบหลายชั้น
 
-## การทำงาน
+## Intelligence ที่เปิดใช้งาน
 
-- cron-job.org สแกนทุก 5 นาที
-- Active hours 08:00–24:00 Asia/Bangkok
-- ใช้ 5M Trend และ Forecast 3/5 แท่งเป็นแกน
-- ตรวจ Momentum, Directional Edge, Confirmation และ Market Regime
-- ปิด PULSE fallback
-- ไม่ใช้ Adaptive time relaxation
+- 5M Candle DNA Weighted KNN
+- ความน่าจะเป็นอีก 5, 10 และ 15 นาที
+- Regular / Hidden RSI divergence
+- Regular / Hidden MACD divergence
+- Liquidity sweep และ fake breakout
+- BOS / CHOCH market structure
+- Intelligence overlay ปรับคะแนนและบล็อก ENTRY เมื่อความเสี่ยงกับดักสูง
+- cron-job.org เรียกทุก 5 นาที
 - ไม่ใช้ Redis
-- Risk HIGH ถูกบล็อก
-- ส่ง LINE เฉพาะสัญญาณที่ผ่านเกณฑ์
+- PULSE fallback ยังคงปิด
 
-ระบบไม่รับประกันจำนวนสัญญาณ อัตราชนะ หรือผลกำไร
+## ข้อจำกัดที่ต้องเข้าใจ
+
+Live Pattern Memory ใช้แท่งที่ provider โหลดมาในรอบปัจจุบันเท่านั้น ปัจจุบันจึงยังไม่ใช่คลังหลายล้านรูปแบบ การสร้าง Million-Pattern Archive ต้องมีข้อมูล XAU/USD ย้อนหลังหลายปีและกระบวนการฝึกแบบ Offline เพิ่มเติม
+
+ค่าความน่าจะเป็นเป็น Model Estimate ไม่ใช่อัตราชนะที่พิสูจน์แล้ว และระบบไม่รับประกันกำไร

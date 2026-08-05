@@ -1,3 +1,14 @@
+# v11.0.0 — PATTERN INTELLIGENCE 5M
+
+- Added 5M Candle DNA weighted-nearest-neighbor memory.
+- Added next 5/10/15-minute UP/DOWN/SIDEWAY probability distributions.
+- Added regular and hidden RSI/MACD divergence.
+- Added liquidity-sweep and fake-breakout detection.
+- Added BOS/CHOCH market-structure analysis.
+- Added intelligence overlay that adjusts score/probability and blocks high-risk traps.
+- Keeps cron-job.org every 5 minutes, no Redis, and PULSE disabled.
+- Current live memory uses the provider candle window; million-pattern training is not yet active.
+
 # v10.3.1 — CLASSIC 9.8 PRO PLUS
 
 - Fixes stale v10.2 ALERT_MIN_* environment values overriding Classic thresholds.

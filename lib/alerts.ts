@@ -104,7 +104,7 @@ function fingerprint(payload: AnyRecord, slotMinutes: number): string {
   const d = payload?.tradeDecision || {};
   const slot = Math.floor(Date.now() / (slotMinutes * 60 * 1000));
   return [
-    "gold-pulse-v10.3.1-classic",
+    "gold-pulse-v11-pattern-intelligence",
     payload.symbol || "XAU/USD",
     slot,
     d.direction || "WAIT"
@@ -115,20 +115,22 @@ export function buildSignalText(payload: AnyRecord, evaluation: AnyRecord): stri
   const d = payload.tradeDecision || {};
   const icon = d.direction === "BUY" ? "🟢" : "🔴";
   return [
-    `${icon} GOLD PULSE X v10.3.1 CLASSIC 9.8 PRO PLUS`,
+    `${icon} GOLD PULSE X v11 PATTERN INTELLIGENCE 5M`,
     "",
     `${d.direction} · ${d.entryTier || "CONFIRMED"} · ${d.mode || "TREND"}`,
     `XAU/USD · Model estimate ${Math.round(Number(d.targetProbability || 0))}%`,
     `Signal score ${Math.round(Number(d.signalScore || d.entryQuality || 0))}/100`,
     `Confirmations ${Number(d.confirmationCount || 0)}/4 · Edge ${Number(d?.probabilityMap?.directionalEdge || 0)}`,
     `Market ${evaluation.marketRegime} · 5M trend ${d.mainTrend || "—"}`,
+    `Pattern bias ${d?.fiveMinuteIntelligence?.bias?.direction || "WAIT"} · Trap risk ${Number(d?.fiveMinuteIntelligence?.trapRisk || 0)}%`,
+    `Next 5M U${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.up || 0)} D${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.down || 0)} W${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.sideway || 0)}`,
     "",
     `Entry reference ${numberText(d.entryPrice)}`,
     `TP1 ${numberText(d?.takeProfit?.tp1)} · TP2 ${numberText(d?.takeProfit?.tp2)} · TP3 ${numberText(d?.takeProfit?.tp3)}`,
     `Stop Loss reference ${numberText(d.stopLoss)}`,
     `Risk : Reward TP2 1:${numberText(d?.riskReward?.tp2)}`,
     "",
-    "Classic 9.8 Pro Plus: ใช้ 5M trend + forecast เป็นแกน, ปิด PULSE และเพิ่มตัวกรอง Sideway/Mixed/Counter-trend",
+    "v11: Classic 9.8 Pro Plus + 5M Candle DNA + Divergence + Fake Breakout + Market Structure",
     "⚠️ Model estimate ไม่ใช่อัตราชนะที่พิสูจน์แล้ว และไม่รับประกันกำไร",
     "⚠️ ตรวจราคาโบรกเกอร์ spread และจำกัดความเสี่ยงก่อนเข้า"
   ].join("\n");

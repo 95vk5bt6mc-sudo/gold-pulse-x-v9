@@ -1,6 +1,6 @@
 {
-  "name": "gold-pulse-x-v10-3-1-classic-98-pro-plus",
-  "version": "10.3.1",
+  "name": "gold-pulse-x-v11-pattern-intelligence-5m",
+  "version": "11.0.0",
   "private": true,
   "engines": {
     "node": ">=20.9.0"
@@ -14,7 +14,8 @@
     "schedule:10": "node scripts/set-scan-interval.mjs 10",
     "schedule:15": "node scripts/set-scan-interval.mjs 15",
     "check": "node scripts/static-check.mjs",
-    "test:adaptive": "node scripts/test-v10.2-adaptive.mjs"
+    "test:adaptive": "node scripts/test-v10.2-adaptive.mjs",
+    "test:intelligence": "node scripts/test-v11-intelligence.mjs"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",

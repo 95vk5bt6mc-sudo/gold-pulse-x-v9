@@ -11,7 +11,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v10.3.1 CLASSIC 9.8 PRO PLUS",
+    app: "GOLD PULSE X v11.0 PATTERN INTELLIGENCE 5M",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -46,6 +46,21 @@ export async function GET() {
       deliveryGuardSlotMinutes: config.deliverySlotMinutes,
       persistentStateRequired: false,
       note: "Quality-first filtering. No signal is forced by time or target count."
+    },
+    patternIntelligence: {
+      enabled: true,
+      timeframe: "5min",
+      mode: "live-overlay",
+      features: [
+        "5M Candle DNA Weighted KNN",
+        "RSI/MACD regular and hidden divergence",
+        "Liquidity sweep and fake breakout",
+        "BOS/CHOCH market structure",
+        "Next 5/10/15-minute probability distribution"
+      ],
+      currentLiveMemory: "Up to the provider window loaded per scan",
+      millionPatternArchiveReady: false,
+      note: "Million-pattern training requires an external historical dataset and offline training pipeline."
     },
     scheduler: "cron-job.org | every 5 minutes | endpoint active 08:00-24:00 Asia/Bangkok",
     smartFree: {
