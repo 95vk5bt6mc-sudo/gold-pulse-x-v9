@@ -125,6 +125,8 @@ export function buildSignalText(payload: AnyRecord, evaluation: AnyRecord): stri
     `Pattern bias ${d?.fiveMinuteIntelligence?.bias?.direction || "WAIT"} · Trap risk ${Number(d?.fiveMinuteIntelligence?.trapRisk || 0)}%`,
     `Next 5M U${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.up || 0)} D${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.down || 0)} W${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.sideway || 0)}`,
     "",
+    `5C future ${(payload?.fiveCandleTruth?.patternMemory?.forecasts || []).slice(0,5).map((f: { candle: number; direction: string }) => `#${f.candle}:${f.direction}`).join(" ") || "—"}`,
+    `5C truth dir ${payload?.fiveCandleTruth?.validation?.directionalAccuracy ?? "—"}% · coverage ${payload?.fiveCandleTruth?.validation?.directionalCoverage ?? "—"}% · exact5 ${payload?.fiveCandleTruth?.validation?.exactFive?.accuracy ?? "—"}%`,
     `Entry reference ${numberText(d.entryPrice)}`,
     `TP1 ${numberText(d?.takeProfit?.tp1)} · TP2 ${numberText(d?.takeProfit?.tp2)} · TP3 ${numberText(d?.takeProfit?.tp3)}`,
     `Stop Loss reference ${numberText(d.stopLoss)}`,

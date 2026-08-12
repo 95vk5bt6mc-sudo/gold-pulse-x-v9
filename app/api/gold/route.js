@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { analyze } from "../../../lib/indicators";
 import { getProvider } from "../../../lib/providers";
 import { analyzeFiveMinuteIntelligence, applyFiveMinuteIntelligenceOverlay } from "../../../lib/intelligence/five-minute-intelligence";
+import { analyzeFiveCandleTruth, closedFiveMinuteCandles } from "../../../lib/intelligence/five-candle-truth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -590,8 +591,10 @@ function m1SafeTime(analysis) {
 
 function buildPayload(m1, m5, mode = "live") {
   const oneAnalysis = analyze([...m1], 5);
-  const fiveAnalysis = analyze([...m5], 5);
-  const fiveMinuteIntelligence = analyzeFiveMinuteIntelligence(m5);
+  const m5Closed = closedFiveMinuteCandles(m5);
+  const fiveAnalysis = analyze([...m5Closed], 5);
+  const fiveMinuteIntelligence = analyzeFiveMinuteIntelligence(m5Closed);
+  const fiveCandleTruth = analyzeFiveCandleTruth(m5Closed);
   const baseTradeDecision = combinedTradeDecision(oneAnalysis, fiveAnalysis, m1.at(-1)?.close || 0);
   const tradeDecision = applyFiveMinuteIntelligenceOverlay(baseTradeDecision, fiveMinuteIntelligence);
   const smartFree = buildSmartFreeContext(tradeDecision, oneAnalysis, fiveAnalysis);
@@ -630,6 +633,7 @@ function buildPayload(m1, m5, mode = "live") {
     oneMinute: { candles: m1.slice(-140), analysis: oneAnalysis },
     fiveMinute: { candles: m5.slice(-140), analysis: fiveAnalysis },
     fiveMinuteIntelligence,
+    fiveCandleTruth,
     tradeDecision
   };
 }

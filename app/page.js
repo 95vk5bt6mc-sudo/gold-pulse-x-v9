@@ -724,6 +724,16 @@ export default function Home() {
         </section>
       )}
 
+      {data?.fiveCandleTruth?.ready && (
+        <section className="panel logic">
+          <p className="eyebrow">5-CANDLE TRUTH AUDIT · CLOSED CANDLES ONLY</p>
+          <h2>ทำนายแท่ง 5 นาทีถัดไป #1–#5</h2>
+          <p>{(data.fiveCandleTruth.patternMemory?.forecasts || []).slice(0,5).map((f) => `#${f.candle} ${f.direction} ${f.confidence}%`).join(" · ") || "ยังไม่มี Forecast"}</p>
+          <p>Walk-forward directional accuracy {data.fiveCandleTruth.validation?.directionalAccuracy ?? "—"}% · coverage {data.fiveCandleTruth.validation?.directionalCoverage ?? "—"}% · exact-5 {data.fiveCandleTruth.validation?.exactFive?.accuracy ?? "—"}% · anchors {data.fiveCandleTruth.validation?.anchors ?? 0}</p>
+          <p>Last closed candle {data.fiveCandleTruth.lastClosedCandleAt || "—"} · Open candle dropped {data.fiveCandleTruth.droppedOpenCandle || 0} · Shadow only: ไม่เปลี่ยน Signal Core เดิม</p>
+        </section>
+      )}
+
       <section className="panel reasons"><p className="eyebrow">เหตุผลของโมเดล · {active === "oneMinute" ? "1M" : "5M"}</p><div className="reasonGrid">{(analysis?.reasons || ["รอข้อมูลวิเคราะห์"]).map((reason) => <div className="reason" key={reason}>{reason}</div>)}</div></section>
 
       <section className="panel logic"><p className="eyebrow">MODEL LOGIC v11 PATTERN INTELLIGENCE 5M</p><h2>ประเมินแท่ง 5 นาทีด้วย Pattern Memory และตัวกรองกับดักตลาด</h2><p>ใช้ Classic 9.8 Pro Plus เป็นฐาน แล้วเพิ่ม Candle DNA similarity, RSI/MACD divergence, liquidity sweep, fake breakout และ BOS/CHOCH ระบบจะแสดงความน่าจะเป็นของอีก 5, 10 และ 15 นาที และบล็อก ENTRY เมื่อพบกับดักหรือ divergence ฝั่งตรงข้ามที่แข็งแรง ข้อมูลสดยังจำกัดตามจำนวนแท่งที่ provider โหลดในแต่ละรอบ ไม่ใช่คลังหลายล้านรูปแบบและไม่รับประกันกำไร</p></section>

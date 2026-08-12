@@ -9,6 +9,7 @@ const required = [
   "lib/alerts.ts",
   "lib/config.ts",
   "lib/intelligence/five-minute-intelligence.js",
+  "lib/intelligence/five-candle-truth.js",
   "scripts/test-v11-intelligence.mjs",
   ".github/workflows/gold-pulse-scan.yml",
   ".env.example"

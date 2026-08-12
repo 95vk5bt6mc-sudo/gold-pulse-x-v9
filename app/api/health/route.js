@@ -11,7 +11,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v11.0 PATTERN INTELLIGENCE 5M",
+    app: "GOLD PULSE X v11.0 R1 FIVE-CANDLE TRUTH",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -46,6 +46,16 @@ export async function GET() {
       deliveryGuardSlotMinutes: config.deliverySlotMinutes,
       persistentStateRequired: false,
       note: "Quality-first filtering. No signal is forced by time or target count."
+    },
+    fiveCandleTruth: {
+      enabled: true,
+      mode: "shadow-audit",
+      changesTradeDecision: false,
+      target: "future 5M candle #1-#5 body direction",
+      closedCandlesOnly: true,
+      validation: "no-lookahead walk-forward",
+      extraUpstreamRequests: 0,
+      paidServicesAdded: 0
     },
     patternIntelligence: {
       enabled: true,
