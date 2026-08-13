@@ -100,9 +100,11 @@ export async function sendSignalAlert(payload: AnyRecord) {
     };
   }
 
+  const priority = evaluation.tier === "STRONG" ? "strong" : "confirmed";
   const result = await sendLineText(
     buildSignalText(payload, evaluation),
-    fingerprint(payload, evaluation.config.deliverySlotMinutes)
+    fingerprint(payload, evaluation.config.deliverySlotMinutes),
+    { priority }
   );
 
   return {
@@ -114,6 +116,8 @@ export async function sendSignalAlert(payload: AnyRecord) {
     mode: result.mode,
     status: result.status,
     retryKey: result.retryKey,
+    guardReason: result.guardReason || null,
+    quota: result.quota || null,
     evaluation
   };
 }

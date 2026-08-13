@@ -40,13 +40,15 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, message: "Invalid signal payload" }, { status: 400 });
   }
 
-  const result = await sendLineText(textFor(body), `manual-test|${Date.now()}|${body.side}`);
+  const result = await sendLineText(textFor(body), `manual-test|${Date.now()}|${body.side}`, { priority: "test" });
   return NextResponse.json({
     ok: result.ok,
     sent: result.delivered,
     duplicate: result.duplicate,
     mode: result.mode,
     status: result.status,
+    guardReason: result.guardReason || null,
+    quota: result.quota || null,
     message: result.ok ? "LINE request accepted" : result.detail || "LINE request failed"
-  }, { status: result.ok ? 200 : 502 });
+  }, { status: result.ok ? 200 : (result.status === 429 ? 429 : 502) });
 }

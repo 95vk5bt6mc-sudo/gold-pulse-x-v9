@@ -57,6 +57,16 @@ export async function GET() {
       extraUpstreamRequests: 0,
       paidServicesAdded: 0
     },
+    lineQuotaGuard: {
+      enabled: true,
+      version: "R2.1-SMART-QUOTA-1",
+      monthlyReserveDefault: 30,
+      pacing: "business-day cumulative budget",
+      strongUsesReserve: true,
+      confirmedUsesPacedBudget: true,
+      manualTestPriority: "lowest",
+      monthlyLimitRetry: false
+    },
     decisionPolicy: {
       version: "R2-SIMPLE-1",
       architecture: "single-final-gate",

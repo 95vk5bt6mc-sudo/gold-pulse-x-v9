@@ -1,3 +1,12 @@
+## v11.0 R2.1 — LINE Smart Quota Guard
+- Reads LINE monthly quota and consumption before push/broadcast delivery.
+- Paces CONFIRMED alerts across Bangkok business days using cumulative monthly budget.
+- Reserves 30 messages by default for STRONG alerts near quota exhaustion.
+- Manual LIVE TEST uses lowest priority and is blocked before reserve is consumed.
+- Stops retrying immediately when LINE reports monthly-limit exhaustion/reservation.
+- Returns quota/guard diagnostics instead of masking quota exhaustion as generic 502.
+- Signal Engine R2 decision logic is unchanged.
+
 ## v11.0 R2 — Simplified Signal Policy
 - Single final signal gate after Pattern Intelligence adjustments.
 - Closed 1M + 5M candle locks.
