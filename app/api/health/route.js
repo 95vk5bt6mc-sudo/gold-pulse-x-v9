@@ -11,7 +11,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v11.0 R1 FIVE-CANDLE TRUTH",
+    app: "GOLD PULSE X v11.0 R2 SIMPLIFIED SIGNAL POLICY",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -49,13 +49,21 @@ export async function GET() {
     },
     fiveCandleTruth: {
       enabled: true,
-      mode: "shadow-audit",
-      changesTradeDecision: false,
+      mode: "validated-gate-assist",
+      changesTradeDecision: true,
       target: "future 5M candle #1-#5 body direction",
       closedCandlesOnly: true,
       validation: "no-lookahead walk-forward",
       extraUpstreamRequests: 0,
       paidServicesAdded: 0
+    },
+    decisionPolicy: {
+      version: "R2-SIMPLE-1",
+      architecture: "single-final-gate",
+      closedOneMinuteCandlesOnly: true,
+      lineRechecksEntryThresholds: false,
+      entryTiers: ["CONFIRMED", "STRONG"],
+      fiveCandleTruthUse: "evidence only when walk-forward quality is sufficient"
     },
     patternIntelligence: {
       enabled: true,

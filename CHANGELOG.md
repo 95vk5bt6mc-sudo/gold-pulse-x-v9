@@ -1,3 +1,10 @@
+## v11.0 R2 — Simplified Signal Policy
+- Single final signal gate after Pattern Intelligence adjustments.
+- Closed 1M + 5M candle locks.
+- LINE trusts the final decision instead of duplicating entry thresholds.
+- Five-Candle Truth is validated supporting evidence only.
+- Visible entry tiers simplified to CONFIRMED / STRONG.
+
 # v11.0.0 — PATTERN INTELLIGENCE 5M
 
 - Added 5M Candle DNA weighted-nearest-neighbor memory.

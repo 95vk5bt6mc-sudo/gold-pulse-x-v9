@@ -8,6 +8,7 @@ const required = [
   "app/api/scan/route.js",
   "lib/alerts.ts",
   "lib/config.ts",
+  "lib/core/signal-policy.js",
   "lib/intelligence/five-minute-intelligence.js",
   "lib/intelligence/five-candle-truth.js",
   "scripts/test-v11-intelligence.mjs",
@@ -35,7 +36,9 @@ for (const marker of [
   "analyzeFiveMinuteIntelligence",
   "applyFiveMinuteIntelligenceOverlay",
   "fiveMinuteIntelligence",
-  "patternIntelligenceEnabled: true"
+  "patternIntelligenceEnabled: true",
+  "finalizeSignalDecision",
+  "closedOneMinuteCandles"
 ]) {
   if (!route.includes(marker)) {
     console.error(`❌ missing route marker: ${marker}`);

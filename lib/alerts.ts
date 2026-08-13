@@ -14,35 +14,8 @@ export function evaluateAlert(payload: AnyRecord) {
   const direction = String(d.direction || "WAIT").toUpperCase();
   const tier = String(d.entryTier || "WAIT").toUpperCase();
   const mode = String(d.mode || "NONE").toUpperCase();
-  const confirmations = Number(d.confirmationCount || 0);
-  const directionalEdge = Number(d?.probabilityMap?.directionalEdge || 0);
-  const waitProbability = Number(d?.probabilityMap?.wait || 0);
+  const policy = d?.decisionPolicy || null;
   const marketRegime = String(payload?.smartFree?.marketRegime || "MIXED").toUpperCase();
-
-  const opportunity = tier === "OPPORTUNITY";
-  const scout = tier === "SCOUT";
-  const confirmed = tier === "CONFIRMED" || tier === "STRONG";
-  const pulse = tier === "PULSE";
-
-  const minimumProbability = confirmed
-    ? config.confirmedMinProbability
-    : scout
-      ? config.scoutMinProbability
-      : opportunity
-        ? config.opportunityMinProbability
-        : config.alertMinProbability;
-
-  const minimumScore = confirmed
-    ? config.confirmedMinScore
-    : scout
-      ? config.scoutMinScore
-      : opportunity
-        ? config.opportunityMinScore
-        : config.alertMinScore;
-
-  const minimumConfirmations = scout
-    ? config.scoutMinimumConfirmations
-    : config.minimumConfirmations;
 
   const reasons: string[] = [];
   if (!config.alertsEnabled) reasons.push("alerts-disabled");
@@ -51,31 +24,9 @@ export function evaluateAlert(payload: AnyRecord) {
   if (payload?.dataMode !== "live") reasons.push("data-not-live");
   if (d?.status !== "ENTRY") reasons.push("decision-not-entry");
   if (!["BUY", "SELL"].includes(direction)) reasons.push("direction-not-actionable");
-  if (pulse) reasons.push("pulse-disabled-classic-mode");
   if (d?.qa?.checks?.riskAccepted === false) reasons.push("risk-high-blocked");
-  if (d?.qa?.checks?.setupValid === false) reasons.push("setup-invalid");
-  if (probability < minimumProbability) reasons.push("probability-below-gate");
-  if (score < minimumScore) reasons.push("score-below-gate");
-  if (confirmations < minimumConfirmations) reasons.push("confirmations-below-gate");
-
-  if ((opportunity || scout) && directionalEdge < config.minimumDirectionalEdge) {
-    reasons.push("directional-edge-below-gate");
-  }
-  if (scout && waitProbability > 50) reasons.push("wait-probability-too-high-for-scout");
-
-  // ตลาด Sideway/Mixed ต้องมีหลักฐานแข็งขึ้น แต่ CONFIRMED/STRONG ไม่ถูกลงโทษซ้ำ
-  if (!confirmed && marketRegime === "RANGE") {
-    if (directionalEdge < config.rangeMinimumEdge) reasons.push("range-edge-too-low");
-    if (confirmations < 3) reasons.push("range-confirmations-too-low");
-  }
-  if (!confirmed && marketRegime === "MIXED") {
-    if (directionalEdge < config.mixedMinimumEdge) reasons.push("mixed-edge-too-low");
-    if (confirmations < 3) reasons.push("mixed-confirmations-too-low");
-  }
-  if (mode === "COUNTER_TREND") {
-    if (directionalEdge < config.counterTrendMinimumEdge) reasons.push("counter-trend-edge-too-low");
-    if (confirmations < 3) reasons.push("counter-trend-confirmations-too-low");
-  }
+  if (d?.intelligenceOverlay?.blocked === true) reasons.push("intelligence-hard-block");
+  if (policy?.version && policy.pass !== true) reasons.push("final-policy-not-passed");
 
   return {
     eligible: reasons.length === 0,
@@ -86,15 +37,15 @@ export function evaluateAlert(payload: AnyRecord) {
     tier,
     mode,
     marketRegime,
-    confirmations,
-    directionalEdge,
-    waitProbability,
+    confirmations: Number(d.confirmationCount || 0),
+    directionalEdge: Number(d?.probabilityMap?.directionalEdge || 0),
+    waitProbability: Number(d?.probabilityMap?.wait || 0),
     appliedGate: {
-      tier,
-      minimumProbability,
-      minimumScore,
-      minimumConfirmations,
-      minimumDirectionalEdge: opportunity || scout ? config.minimumDirectionalEdge : null
+      policyVersion: policy?.version || "legacy",
+      singleFinalGate: Boolean(policy?.version),
+      policyPass: policy?.pass ?? null,
+      quality: policy?.quality ?? null,
+      evidenceCount: policy?.evidenceCount ?? null
     },
     config
   };
