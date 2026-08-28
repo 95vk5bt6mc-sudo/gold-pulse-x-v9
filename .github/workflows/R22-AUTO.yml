@@ -1,0 +1,213 @@
+name: R22 Auto Installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/R22-AUTO.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: r22-auto-installer
+  cancel-in-progress: false
+
+jobs:
+  install-r22:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Patch R2.2 LINE quota survival
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path("lib/line.ts")
+          if not p.exists():
+              raise SystemExit("ERROR: lib/line.ts not found")
+
+          s = p.read_text()
+
+          if "getLineQuotaSnapshot" not in s or "function quotaDecision" not in s:
+              raise SystemExit("ERROR: R2.1 LINE quota guard not found")
+
+          s = s.replace(
+              'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 30, 0, 10000)',
+              'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000)'
+          )
+
+          start = s.find("function quotaDecision(snapshot: LineQuotaSnapshot, priority: LinePriority) {")
+          end = s.find("\nfunction deterministicUuid", start)
+
+          if start < 0 or end < 0:
+              raise SystemExit("ERROR: unsupported lib/line.ts layout")
+
+          replacement = '''function quotaDecision(snapshot: LineQuotaSnapshot, priority: LinePriority) {
+            if (!snapshot.checked || !snapshot.limited || snapshot.remaining == null) {
+              return { allowed: true, reason: "quota-unlimited-or-unavailable" };
+            }
+
+            if (snapshot.remaining <= 0) {
+              return { allowed: false, reason: "monthly-quota-exhausted" };
+            }
+
+            const hardPacedBudget = snapshot.monthlyLimit != null
+              ? Math.floor(snapshot.monthlyLimit * (snapshot.businessDaysElapsed / snapshot.businessDaysTotal))
+              : null;
+
+            const dailyCap = integerEnv("LINE_DAILY_PUSH_CAP", 12, 1, 10000);
+            const strongBurst = integerEnv("LINE_STRONG_DAILY_BURST", 2, 0, 1000);
+            const dailyLimit = priority === "strong" ? dailyCap + strongBurst : dailyCap;
+
+            if (snapshot.dailyUsed != null && snapshot.dailyUsed >= dailyLimit) {
+              return {
+                allowed: false,
+                reason: priority === "strong" ? "strong-daily-cap-used" : "daily-cap-used"
+              };
+            }
+
+            if (
+              hardPacedBudget != null &&
+              snapshot.totalUsage != null &&
+              snapshot.totalUsage >= hardPacedBudget
+            ) {
+              return { allowed: false, reason: "hard-monthly-pace-used" };
+            }
+
+            if (priority === "strong") {
+              return {
+                allowed: true,
+                reason: snapshot.survivalMode
+                  ? "strong-within-hard-pace-reserve"
+                  : "strong-within-hard-pace"
+              };
+            }
+
+            if (snapshot.survivalMode || snapshot.remaining <= snapshot.reserve) {
+              return { allowed: false, reason: "reserve-protected" };
+            }
+
+            if (snapshot.budgetHeadroom != null && snapshot.budgetHeadroom <= 0) {
+              return { allowed: false, reason: "confirmed-pace-budget-used" };
+            }
+
+            if (priority === "test") {
+              if (snapshot.remainingPercent != null && snapshot.remainingPercent <= 25) {
+                return { allowed: false, reason: "test-reserve-protected" };
+              }
+
+              if (snapshot.budgetHeadroom != null && snapshot.budgetHeadroom < 3) {
+                return { allowed: false, reason: "test-budget-protected" };
+              }
+            }
+
+            return { allowed: true, reason: "within-r22-paced-budget" };
+          }
+          '''
+
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s)
+
+          env = Path(".env.example")
+          e = env.read_text() if env.exists() else ""
+
+          if "LINE_MONTHLY_RESERVE_MESSAGES=" in e:
+              e = re.sub(r"LINE_MONTHLY_RESERVE_MESSAGES=\d+", "LINE_MONTHLY_RESERVE_MESSAGES=45", e)
+          else:
+              e += "\nLINE_MONTHLY_RESERVE_MESSAGES=45\n"
+
+          if "LINE_DAILY_PUSH_CAP=" not in e:
+              e += "LINE_DAILY_PUSH_CAP=12\n"
+
+          if "LINE_STRONG_DAILY_BURST=" not in e:
+              e += "LINE_STRONG_DAILY_BURST=2\n"
+
+          env.write_text(e)
+
+          health = Path("app/api/health/route.js")
+          if health.exists():
+              h = health.read_text()
+              h = h.replace('version: "R2.1-SMART-QUOTA-1"', 'version: "R2.2-QUOTA-SURVIVAL-1"')
+              h = h.replace("monthlyReserveDefault: 30", "monthlyReserveDefault: 45")
+              health.write_text(h)
+          PY
+
+      - name: TypeScript check
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [ -x node_modules/.bin/tsc ]; then
+            node_modules/.bin/tsc --noEmit --pretty false
+          fi
+
+      - name: Regression tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          for t in \
+            scripts/test-v11-r2-signal-policy.mjs \
+            scripts/test-v11-intelligence.mjs \
+            scripts/test-v11-r1-five-candle-truth.mjs
+          do
+            if [ -f "$t" ]; then
+              node "$t"
+            fi
+          done
+
+      - name: Production build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build
+
+      - name: Commit and push R2.2
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add lib/line.ts .env.example
+          if [ -f app/api/health/route.js ]; then
+            git add app/api/health/route.js
+          fi
+
+          git diff --cached --check
+
+          if git diff --cached --quiet; then
+            echo "R2.2 is already installed. No changes to push."
+            exit 0
+          fi
+
+          git commit -m "Install R2.2 LINE quota survival"
+          git push origin HEAD:main
+
+      - name: Done
+        run: |
+          echo "✅ R2.2 installed"
+          echo "✅ Reserve: 45"
+          echo "✅ Daily cap: 12"
+          echo "✅ STRONG burst: +2"
+          echo "✅ STRONG cannot bypass monthly pace"
