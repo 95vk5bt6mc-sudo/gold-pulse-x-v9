@@ -101,7 +101,7 @@ export async function getLineQuotaSnapshot(
   mode: "push" | "broadcast" | "disabled" = "push"
 ): Promise<LineQuotaSnapshot> {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const reserve = integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 30, 0, 10000);
+  const reserve = integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000);
   const date = bangkokDateParts();
   const businessDays = businessDayProgress(date.year, date.month, date.day);
 
@@ -189,27 +189,62 @@ function quotaDecision(snapshot: LineQuotaSnapshot, priority: LinePriority) {
   if (!snapshot.checked || !snapshot.limited || snapshot.remaining == null) {
     return { allowed: true, reason: "quota-unlimited-or-unavailable" };
   }
+
   if (snapshot.remaining <= 0) {
     return { allowed: false, reason: "monthly-quota-exhausted" };
   }
-  if (priority === "strong") {
-    return { allowed: true, reason: snapshot.survivalMode ? "strong-reserve" : "strong-priority" };
+
+  const hardPacedBudget = snapshot.monthlyLimit != null
+    ? Math.floor(snapshot.monthlyLimit * (snapshot.businessDaysElapsed / snapshot.businessDaysTotal))
+    : null;
+
+  const dailyCap = integerEnv("LINE_DAILY_PUSH_CAP", 12, 1, 10000);
+  const strongBurst = integerEnv("LINE_STRONG_DAILY_BURST", 2, 0, 1000);
+  const dailyLimit = priority === "strong" ? dailyCap + strongBurst : dailyCap;
+
+  if (snapshot.dailyUsed != null && snapshot.dailyUsed >= dailyLimit) {
+    return {
+      allowed: false,
+      reason: priority === "strong" ? "strong-daily-cap-used" : "daily-cap-used"
+    };
   }
+
+  if (
+    hardPacedBudget != null &&
+    snapshot.totalUsage != null &&
+    snapshot.totalUsage >= hardPacedBudget
+  ) {
+    return { allowed: false, reason: "hard-monthly-pace-used" };
+  }
+
+  if (priority === "strong") {
+    return {
+      allowed: true,
+      reason: snapshot.survivalMode
+        ? "strong-within-hard-pace-reserve"
+        : "strong-within-hard-pace"
+    };
+  }
+
   if (snapshot.survivalMode || snapshot.remaining <= snapshot.reserve) {
     return { allowed: false, reason: "reserve-protected" };
   }
+
   if (snapshot.budgetHeadroom != null && snapshot.budgetHeadroom <= 0) {
-    return { allowed: false, reason: "pace-budget-used" };
+    return { allowed: false, reason: "confirmed-pace-budget-used" };
   }
+
   if (priority === "test") {
-    if (snapshot.remainingPercent != null && snapshot.remainingPercent <= 20) {
+    if (snapshot.remainingPercent != null && snapshot.remainingPercent <= 25) {
       return { allowed: false, reason: "test-reserve-protected" };
     }
-    if (snapshot.budgetHeadroom != null && snapshot.budgetHeadroom < 2) {
+
+    if (snapshot.budgetHeadroom != null && snapshot.budgetHeadroom < 3) {
       return { allowed: false, reason: "test-budget-protected" };
     }
   }
-  return { allowed: true, reason: "within-paced-budget" };
+
+  return { allowed: true, reason: "within-r22-paced-budget" };
 }
 
 function deterministicUuid(seed: string): string {

@@ -59,8 +59,8 @@ export async function GET() {
     },
     lineQuotaGuard: {
       enabled: true,
-      version: "R2.1-SMART-QUOTA-1",
-      monthlyReserveDefault: 30,
+      version: "R2.2-QUOTA-SURVIVAL-1",
+      monthlyReserveDefault: 45,
       pacing: "business-day cumulative budget",
       strongUsesReserve: true,
       confirmedUsesPacedBudget: true,
