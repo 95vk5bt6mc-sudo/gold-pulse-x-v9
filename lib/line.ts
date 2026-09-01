@@ -1,758 +1,596 @@
-import crypto from "node:crypto";
+name: R22 Auto Installer
 
-export type LinePriority = "strong" | "confirmed" | "test";
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/R22-AUTO.yml"
+  workflow_dispatch:
 
-export interface LineQuotaSnapshot {
-  checked: boolean;
-  limited: boolean;
-  monthlyLimit: number | null;
-  totalUsage: number | null;
-  remaining: number | null;
-  reserve: number;
-  businessDaysTotal: number;
-  businessDaysElapsed: number;
-  businessDaysLeft: number;
-  cumulativeBudget: number | null;
-  budgetHeadroom: number | null;
-  dailyUsed: number | null;
-  remainingPercent: number | null;
-  survivalMode: boolean;
-  sourceStatus: {
-    quota: number | null;
-    consumption: number | null;
-    daily: number | null;
-  };
-}
+permissions:
+  contents: write
 
-export interface LineSendResult {
-  ok: boolean;
-  delivered: boolean;
-  duplicate: boolean;
-  mode: "push" | "broadcast" | "disabled";
-  status: number;
-  retryKey?: string;
-  requestId?: string | null;
-  acceptedRequestId?: string | null;
-  detail?: string;
-  guardReason?: string;
-  quota?: LineQuotaSnapshot;
-}
+concurrency:
+  group: r22-auto-installer
+  cancel-in-progress: false
 
-function integerEnv(
-  name: string,
-  fallback: number,
-  min: number,
-  max: number
-): number {
-  const raw = Number(process.env[name]);
-  if (!Number.isFinite(raw)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(raw)));
-}
+jobs:
+  install-r22:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
-function bangkokDateParts(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Bangkok",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(now);
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  const map = Object.fromEntries(
-    parts.map((part) => [part.type, part.value])
-  );
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
 
-  return {
-    year: Number(map.year),
-    month: Number(map.month),
-    day: Number(map.day),
-    ymd: `${map.year}${map.month}${map.day}`
-  };
-}
+      - name: Install dependencies
+        run: npm ci
 
-function businessDayProgress(
-  year: number,
-  month: number,
-  day: number
-) {
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      - name: Patch LINE priority quota pacing
+        shell: bash
+        run: |
+          set -Eeuo pipefail
 
-  let total = 0;
-  let elapsed = 0;
+          python3 <<'PY'
+          from pathlib import Path
+          import re
 
-  for (let current = 1; current <= lastDay; current += 1) {
-    const weekday = new Date(
-      Date.UTC(year, month - 1, current)
-    ).getUTCDay();
+          p = Path("lib/line.ts")
 
-    if (weekday >= 1 && weekday <= 5) {
-      total += 1;
+          if not p.exists():
+              raise SystemExit("ERROR: lib/line.ts not found")
 
-      if (current <= day) {
-        elapsed += 1;
-      }
-    }
-  }
+          s = p.read_text()
 
-  return {
-    total: Math.max(1, total),
-    elapsed,
-    left: Math.max(1, total - elapsed + 1)
-  };
-}
+          if "getLineQuotaSnapshot" not in s:
+              raise SystemExit("ERROR: getLineQuotaSnapshot() not found")
 
-async function getJson(url: string, token: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
+          if "quotaDecision" not in s:
+              raise SystemExit("ERROR: quotaDecision() not found")
 
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      cache: "no-store",
-      signal: controller.signal
-    });
+          # ---------------------------------------------------------
+          # Enforce reserve default = 45
+          # ---------------------------------------------------------
 
-    const body = await response.json().catch(() => ({}));
-
-    return {
-      status: response.status,
-      ok: response.ok,
-      body
-    };
-  } catch {
-    return {
-      status: null,
-      ok: false,
-      body: {}
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-export async function getLineQuotaSnapshot(
-  mode: "push" | "broadcast" | "disabled" = "push"
-): Promise<LineQuotaSnapshot> {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-
-  const reserve = integerEnv(
-    "LINE_MONTHLY_RESERVE_MESSAGES",
-    45,
-    0,
-    10000
-  );
-
-  const date = bangkokDateParts();
-
-  const businessDays = businessDayProgress(
-    date.year,
-    date.month,
-    date.day
-  );
-
-  if (!token || mode === "disabled") {
-    return {
-      checked: false,
-      limited: false,
-      monthlyLimit: null,
-      totalUsage: null,
-      remaining: null,
-      reserve,
-      businessDaysTotal: businessDays.total,
-      businessDaysElapsed: businessDays.elapsed,
-      businessDaysLeft: businessDays.left,
-      cumulativeBudget: null,
-      budgetHeadroom: null,
-      dailyUsed: null,
-      remainingPercent: null,
-      survivalMode: false,
-      sourceStatus: {
-        quota: null,
-        consumption: null,
-        daily: null
-      }
-    };
-  }
-
-  const dailyEndpoint =
-    mode === "broadcast"
-      ? `https://api.line.me/v2/bot/message/delivery/broadcast?date=${date.ymd}`
-      : `https://api.line.me/v2/bot/message/delivery/push?date=${date.ymd}`;
-
-  const [
-    quotaResponse,
-    consumptionResponse,
-    dailyResponse
-  ] = await Promise.all([
-    getJson(
-      "https://api.line.me/v2/bot/message/quota",
-      token
-    ),
-    getJson(
-      "https://api.line.me/v2/bot/message/quota/consumption",
-      token
-    ),
-    getJson(
-      dailyEndpoint,
-      token
-    )
-  ]);
-
-  const limited =
-    quotaResponse.ok &&
-    quotaResponse.body?.type === "limited";
-
-  const monthlyLimit =
-    limited &&
-    Number.isFinite(
-      Number(quotaResponse.body?.value)
-    )
-      ? Number(quotaResponse.body.value)
-      : null;
-
-  const totalUsage =
-    consumptionResponse.ok &&
-    Number.isFinite(
-      Number(consumptionResponse.body?.totalUsage)
-    )
-      ? Number(consumptionResponse.body.totalUsage)
-      : null;
-
-  const dailyUsed =
-    dailyResponse.ok &&
-    dailyResponse.body?.status === "ready" &&
-    Number.isFinite(
-      Number(dailyResponse.body?.success)
-    )
-      ? Number(dailyResponse.body.success)
-      : null;
-
-  const remaining =
-    monthlyLimit != null &&
-    totalUsage != null
-      ? Math.max(
-          0,
-          monthlyLimit - totalUsage
-        )
-      : null;
-
-  const standardPool =
-    monthlyLimit == null
-      ? null
-      : Math.max(
-          0,
-          monthlyLimit - reserve
-        );
-
-  const cumulativeBudget =
-    standardPool == null
-      ? null
-      : Math.floor(
-          standardPool *
-            (
-              businessDays.elapsed /
-              businessDays.total
-            )
-        );
-
-  const budgetHeadroom =
-    cumulativeBudget != null &&
-    totalUsage != null
-      ? Math.max(
-          0,
-          cumulativeBudget - totalUsage
-        )
-      : null;
-
-  const remainingPercent =
-    remaining != null &&
-    monthlyLimit != null &&
-    monthlyLimit > 0
-      ? Math.round(
-          (remaining / monthlyLimit) *
-            1000
-        ) / 10
-      : null;
-
-  const survivalMode =
-    remaining != null &&
-    (
-      remaining <= reserve ||
-      (
-        remainingPercent != null &&
-        remainingPercent <= 10
-      )
-    );
-
-  return {
-    checked:
-      quotaResponse.ok &&
-      consumptionResponse.ok,
-    limited,
-    monthlyLimit,
-    totalUsage,
-    remaining,
-    reserve,
-    businessDaysTotal:
-      businessDays.total,
-    businessDaysElapsed:
-      businessDays.elapsed,
-    businessDaysLeft:
-      businessDays.left,
-    cumulativeBudget,
-    budgetHeadroom,
-    dailyUsed,
-    remainingPercent,
-    survivalMode,
-    sourceStatus: {
-      quota:
-        quotaResponse.status,
-      consumption:
-        consumptionResponse.status,
-      daily:
-        dailyResponse.status
-    }
-  };
-}
-
-function quotaDecision(
-  snapshot: LineQuotaSnapshot,
-  priority: LinePriority
-) {
-  if (
-    !snapshot.checked ||
-    !snapshot.limited ||
-    snapshot.remaining == null
-  ) {
-    return {
-      allowed: true,
-      reason: "quota-unlimited-or-unavailable"
-    };
-  }
-
-  if (snapshot.remaining <= 0) {
-    return {
-      allowed: false,
-      reason: "monthly-quota-exhausted"
-    };
-  }
-
-  const hardPacedBudget =
-    snapshot.monthlyLimit != null
-      ? Math.floor(
-          snapshot.monthlyLimit *
-          (
-            snapshot.businessDaysElapsed /
-            snapshot.businessDaysTotal
+          s = re.sub(
+              r'integerEnv\("LINE_MONTHLY_RESERVE_MESSAGES",\s*\d+,\s*0,\s*10000\)',
+              'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000)',
+              s
           )
-        )
-      : null;
 
-  const dailyCap = integerEnv(
-    "LINE_DAILY_PUSH_CAP",
-    12,
-    1,
-    10000
-  );
+          # ---------------------------------------------------------
+          # Locate quotaDecision()
+          # Supports single-line and multiline function signatures.
+          # ---------------------------------------------------------
 
-  const strongBurst = integerEnv(
-    "LINE_STRONG_DAILY_BURST",
-    2,
-    0,
-    1000
-  );
+          match = re.search(
+              r"function\s+quotaDecision\s*\(\s*"
+              r"snapshot\s*:\s*LineQuotaSnapshot\s*,\s*"
+              r"priority\s*:\s*LinePriority\s*"
+              r"\)\s*\{",
+              s,
+              re.MULTILINE
+          )
 
-  const dailyLimit =
-    priority === "strong"
-      ? dailyCap + strongBurst
-      : dailyCap;
+          if not match:
+              raise SystemExit(
+                  "ERROR: quotaDecision() signature not found"
+              )
 
-  if (
-    snapshot.dailyUsed != null &&
-    snapshot.dailyUsed >= dailyLimit
-  ) {
-    return {
-      allowed: false,
-      reason:
-        priority === "strong"
-          ? "strong-daily-cap-used"
-          : "daily-cap-used"
-    };
-  }
+          start = match.start()
 
-  if (
-    hardPacedBudget != null &&
-    snapshot.totalUsage != null &&
-    snapshot.totalUsage >= hardPacedBudget
-  ) {
-    return {
-      allowed: false,
-      reason: "hard-monthly-pace-used"
-    };
-  }
+          next_function = re.search(
+              r"\nfunction\s+deterministicUuid\s*\(",
+              s[match.end():],
+              re.MULTILINE
+          )
 
-  if (priority === "strong") {
-    return {
-      allowed: true,
-      reason:
-        snapshot.survivalMode
-          ? "strong-within-hard-pace-reserve"
-          : "strong-within-hard-pace"
-    };
-  }
+          if not next_function:
+              raise SystemExit(
+                  "ERROR: deterministicUuid() boundary not found"
+              )
 
-  if (
-    snapshot.survivalMode ||
-    snapshot.remaining <= snapshot.reserve
-  ) {
-    return {
-      allowed: false,
-      reason: "reserve-protected"
-    };
-  }
+          end = match.end() + next_function.start()
 
-  if (priority === "test") {
-    if (
-      snapshot.remainingPercent != null &&
-      snapshot.remainingPercent <= 25
-    ) {
-      return {
-        allowed: false,
-        reason: "test-reserve-protected"
-      };
-    }
+          # ---------------------------------------------------------
+          # PRIORITY PACING POLICY
+          #
+          # TEST:
+          #   hard pace only
+          #
+          # CONFIRMED:
+          #   hard pace + LINE_CONFIRMED_PACE_BURST
+          #   default +3
+          #
+          # STRONG:
+          #   hard pace + LINE_STRONG_PACE_BURST
+          #   default +5
+          #
+          # ALL priorities:
+          #   - cannot exceed monthly quota
+          #   - cannot consume reserve
+          #   - obey daily caps when LINE daily usage is available
+          # ---------------------------------------------------------
 
-    return {
-      allowed: true,
-      reason: "test-within-hard-pace"
-    };
-  }
-
-  if (
-    snapshot.budgetHeadroom != null &&
-    snapshot.budgetHeadroom <= 0
-  ) {
-    return {
-      allowed: false,
-      reason: "confirmed-pace-budget-used"
-    };
-  }
-
-  return {
-    allowed: true,
-    reason: "within-r22-paced-budget"
-  };
-}
-
-function deterministicUuid(
-  seed: string
-): string {
-  const bytes = crypto
-    .createHash("sha256")
-    .update(seed)
-    .digest()
-    .subarray(0, 16);
-
-  bytes[6] =
-    (bytes[6] & 0x0f) | 0x50;
-
-  bytes[8] =
-    (bytes[8] & 0x3f) | 0x80;
-
-  const hex =
-    bytes.toString("hex");
-
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-async function postOnce(
-  url: string,
-  token: string,
-  retryKey: string,
-  body: unknown
-) {
-  const controller =
-    new AbortController();
-
-  const timeout =
-    setTimeout(
-      () => controller.abort(),
-      12_000
-    );
-
-  try {
-    return await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization:
-          `Bearer ${token}`,
-        "Content-Type":
-          "application/json",
-        "X-Line-Retry-Key":
-          retryKey
-      },
-      body:
-        JSON.stringify(body),
-      signal:
-        controller.signal,
-      cache:
-        "no-store"
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function isMonthlyLimit(
-  status: number,
-  detail: string
-) {
-  return (
-    status === 429 &&
-    /monthly limit|free messages|additional messages/i.test(
-      detail || ""
-    )
-  );
-}
-
-export async function sendLineText(
-  text: string,
-  retrySeed?: string,
-  options: {
-    priority?: LinePriority
-  } = {}
-): Promise<LineSendResult> {
-  const token =
-    process.env.LINE_CHANNEL_ACCESS_TOKEN;
-
-  const target =
-    process.env.LINE_TARGET_ID;
-
-  const enabled =
-    ![
-      "0",
-      "false",
-      "off",
-      "no"
-    ].includes(
-      String(
-        process.env.LINE_ALERTS_ENABLED ||
-          "true"
-      ).toLowerCase()
-    );
-
-  if (!enabled || !token) {
-    return {
-      ok: false,
-      delivered: false,
-      duplicate: false,
-      mode: "disabled",
-      status: 503,
-      detail:
-        "LINE is not configured or disabled"
-    };
-  }
-
-  const retryKey =
-    retrySeed
-      ? deterministicUuid(retrySeed)
-      : crypto.randomUUID();
-
-  const mode =
-    target
-      ? "push"
-      : "broadcast";
-
-  const priority =
-    options.priority ||
-    "confirmed";
-
-  const quota =
-    await getLineQuotaSnapshot(
-      mode
-    );
-
-  const guard =
-    quotaDecision(
-      quota,
-      priority
-    );
-
-  if (!guard.allowed) {
-    return {
-      ok: false,
-      delivered: false,
-      duplicate: false,
-      mode,
-      status: 429,
-      retryKey,
-      detail:
-        `LINE quota guard blocked: ${guard.reason}`,
-      guardReason:
-        guard.reason,
-      quota
-    };
-  }
-
-  const url =
-    target
-      ? "https://api.line.me/v2/bot/message/push"
-      : "https://api.line.me/v2/bot/message/broadcast";
-
-  const body =
-    target
-      ? {
-          to: target,
-          messages: [
-            {
-              type: "text",
-              text
+          replacement = '''function quotaDecision(
+            snapshot: LineQuotaSnapshot,
+            priority: LinePriority
+          ) {
+            if (
+              !snapshot.checked ||
+              !snapshot.limited ||
+              snapshot.remaining == null
+            ) {
+              return {
+                allowed: true,
+                reason: "quota-unlimited-or-unavailable"
+              };
             }
-          ],
-          notificationDisabled:
-            false
-        }
-      : {
-          messages: [
-            {
-              type: "text",
-              text
+
+            if (snapshot.remaining <= 0) {
+              return {
+                allowed: false,
+                reason: "monthly-quota-exhausted"
+              };
             }
-          ],
-          notificationDisabled:
-            false
-        };
 
-  let lastError = "";
+            // Reserve is protected for ALL priorities.
+            if (
+              snapshot.survivalMode ||
+              snapshot.remaining <= snapshot.reserve
+            ) {
+              return {
+                allowed: false,
+                reason: "reserve-protected"
+              };
+            }
 
-  for (
-    let attempt = 0;
-    attempt < 3;
-    attempt += 1
-  ) {
-    try {
-      const response =
-        await postOnce(
-          url,
-          token,
-          retryKey,
-          body
-        );
+            const dailyCap = integerEnv(
+              "LINE_DAILY_PUSH_CAP",
+              12,
+              1,
+              10000
+            );
 
-      const detail =
-        await response.text();
+            const strongDailyBurst = integerEnv(
+              "LINE_STRONG_DAILY_BURST",
+              2,
+              0,
+              1000
+            );
 
-      const duplicate =
-        response.status === 409;
+            const dailyLimit =
+              priority === "strong"
+                ? dailyCap + strongDailyBurst
+                : dailyCap;
 
-      if (
-        response.ok ||
-        duplicate
-      ) {
-        return {
-          ok: true,
-          delivered:
-            response.ok,
-          duplicate,
-          mode,
-          status:
-            response.status,
-          retryKey,
-          requestId:
-            response.headers.get(
-              "x-line-request-id"
-            ),
-          acceptedRequestId:
-            response.headers.get(
-              "x-line-accepted-request-id"
-            ),
-          detail:
-            detail || undefined,
-          guardReason:
-            guard.reason,
-          quota
-        };
-      }
+            if (
+              snapshot.dailyUsed != null &&
+              snapshot.dailyUsed >= dailyLimit
+            ) {
+              return {
+                allowed: false,
+                reason:
+                  priority === "strong"
+                    ? "strong-daily-cap-used"
+                    : "daily-cap-used"
+              };
+            }
 
-      lastError =
-        detail ||
-        `LINE HTTP ${response.status}`;
+            const hardPacedBudget =
+              snapshot.monthlyLimit != null
+                ? Math.floor(
+                    snapshot.monthlyLimit *
+                    (
+                      snapshot.businessDaysElapsed /
+                      snapshot.businessDaysTotal
+                    )
+                  )
+                : null;
 
-      if (
-        isMonthlyLimit(
-          response.status,
-          lastError
-        )
-      ) {
-        const refreshedQuota =
-          await getLineQuotaSnapshot(
-            mode
-          );
+            const confirmedPaceBurst = integerEnv(
+              "LINE_CONFIRMED_PACE_BURST",
+              3,
+              0,
+              1000
+            );
 
-        return {
-          ok: false,
-          delivered: false,
-          duplicate: false,
-          mode,
-          status: 429,
-          retryKey,
-          detail:
-            lastError,
-          guardReason:
-            "monthly-limit-or-reservation",
-          quota:
-            refreshedQuota
-        };
-      }
+            const strongPaceBurst = integerEnv(
+              "LINE_STRONG_PACE_BURST",
+              5,
+              0,
+              1000
+            );
 
-      if (
-        response.status < 500 &&
-        response.status !== 429
-      ) {
-        return {
-          ok: false,
-          delivered: false,
-          duplicate: false,
-          mode,
-          status:
-            response.status,
-          retryKey,
-          detail:
-            lastError,
-          guardReason:
-            guard.reason,
-          quota
-        };
-      }
-    } catch (error) {
-      lastError =
-        error instanceof Error
-          ? error.message
-          : "LINE request failed";
-    }
+            const paceBurst =
+              priority === "strong"
+                ? strongPaceBurst
+                : priority === "confirmed"
+                  ? confirmedPaceBurst
+                  : 0;
 
-    await new Promise(
-      (resolve) =>
-        setTimeout(
-          resolve,
-          500 * (attempt + 1)
-        )
-    );
-  }
+            // Maximum total usage before entering reserve.
+            const spendableLimit =
+              snapshot.monthlyLimit != null
+                ? Math.max(
+                    0,
+                    snapshot.monthlyLimit - snapshot.reserve
+                  )
+                : null;
 
-  return {
-    ok: false,
-    delivered: false,
-    duplicate: false,
-    mode,
-    status: 502,
-    retryKey,
-    detail:
-      lastError,
-    guardReason:
-      guard.reason,
-    quota
-  };
-}
+            const rawPriorityPacedBudget =
+              hardPacedBudget != null
+                ? hardPacedBudget + paceBurst
+                : null;
+
+            const priorityPacedBudget =
+              rawPriorityPacedBudget != null &&
+              spendableLimit != null
+                ? Math.min(
+                    rawPriorityPacedBudget,
+                    spendableLimit
+                  )
+                : rawPriorityPacedBudget;
+
+            if (
+              priorityPacedBudget != null &&
+              snapshot.totalUsage != null &&
+              snapshot.totalUsage >= priorityPacedBudget
+            ) {
+              if (priority === "strong") {
+                return {
+                  allowed: false,
+                  reason: "strong-pace-burst-used"
+                };
+              }
+
+              if (priority === "confirmed") {
+                return {
+                  allowed: false,
+                  reason: "confirmed-pace-burst-used"
+                };
+              }
+
+              return {
+                allowed: false,
+                reason: "test-hard-pace-used"
+              };
+            }
+
+            if (priority === "strong") {
+              return {
+                allowed: true,
+                reason: "strong-within-priority-pace"
+              };
+            }
+
+            if (priority === "confirmed") {
+              return {
+                allowed: true,
+                reason: "confirmed-within-priority-pace"
+              };
+            }
+
+            if (
+              snapshot.remainingPercent != null &&
+              snapshot.remainingPercent <= 25
+            ) {
+              return {
+                allowed: false,
+                reason: "test-reserve-protected"
+              };
+            }
+
+            return {
+              allowed: true,
+              reason: "test-within-hard-pace"
+            };
+          }
+          '''
+
+          s = s[:start] + replacement + s[end:]
+
+          # ---------------------------------------------------------
+          # Sanity checks
+          # ---------------------------------------------------------
+
+          required = [
+              'reason: "test-within-hard-pace"',
+              'reason: "confirmed-within-priority-pace"',
+              'reason: "strong-within-priority-pace"',
+              'reason: "test-hard-pace-used"',
+              'reason: "confirmed-pace-burst-used"',
+              'reason: "strong-pace-burst-used"',
+              '"LINE_CONFIRMED_PACE_BURST"',
+              '"LINE_STRONG_PACE_BURST"',
+              "export async function sendLineText",
+              "getLineQuotaSnapshot"
+          ]
+
+          for token in required:
+              if token not in s:
+                  raise SystemExit(
+                      f"ERROR: required quota token missing: {token}"
+                  )
+
+          obsolete = [
+              'reason: "confirmed-pace-budget-used"',
+              'reason: "test-budget-protected"',
+              'reason: "hard-monthly-pace-used"'
+          ]
+
+          for token in obsolete:
+              if token in s:
+                  raise SystemExit(
+                      f"ERROR: obsolete quota logic remains: {token}"
+                  )
+
+          p.write_text(s)
+
+          # ---------------------------------------------------------
+          # .env.example
+          # ---------------------------------------------------------
+
+          env = Path(".env.example")
+          e = env.read_text() if env.exists() else ""
+
+          def set_env(text, key, value):
+              pattern = rf"^{re.escape(key)}=.*$"
+
+              if re.search(pattern, text, re.MULTILINE):
+                  return re.sub(
+                      pattern,
+                      f"{key}={value}",
+                      text,
+                      flags=re.MULTILINE
+                  )
+
+              if text and not text.endswith("\n"):
+                  text += "\n"
+
+              return text + f"{key}={value}\n"
+
+          e = set_env(
+              e,
+              "LINE_MONTHLY_RESERVE_MESSAGES",
+              "45"
+          )
+
+          e = set_env(
+              e,
+              "LINE_DAILY_PUSH_CAP",
+              "12"
+          )
+
+          e = set_env(
+              e,
+              "LINE_STRONG_DAILY_BURST",
+              "2"
+          )
+
+          e = set_env(
+              e,
+              "LINE_CONFIRMED_PACE_BURST",
+              "3"
+          )
+
+          e = set_env(
+              e,
+              "LINE_STRONG_PACE_BURST",
+              "5"
+          )
+
+          env.write_text(e)
+
+          # ---------------------------------------------------------
+          # Health version
+          # ---------------------------------------------------------
+
+          health = Path("app/api/health/route.js")
+
+          if health.exists():
+              h = health.read_text()
+
+              h = re.sub(
+                  r'version:\s*"R2\.[^"]+"',
+                  'version: "R2.3-PRIORITY-PACE-1"',
+                  h
+              )
+
+              h = h.replace(
+                  "monthlyReserveDefault: 30",
+                  "monthlyReserveDefault: 45"
+              )
+
+              health.write_text(h)
+
+          print("✅ Priority quota pacing installed")
+          print("✅ TEST hard pace: +0")
+          print("✅ CONFIRMED pace burst: +3")
+          print("✅ STRONG pace burst: +5")
+          print("✅ Monthly reserve: 45")
+          print("✅ Reserve protected for ALL priorities")
+          PY
+
+      - name: Verify patched source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test -f lib/line.ts
+
+          grep -q \
+            'test-within-hard-pace' \
+            lib/line.ts
+
+          grep -q \
+            'confirmed-within-priority-pace' \
+            lib/line.ts
+
+          grep -q \
+            'strong-within-priority-pace' \
+            lib/line.ts
+
+          grep -q \
+            'LINE_CONFIRMED_PACE_BURST' \
+            lib/line.ts
+
+          grep -q \
+            'LINE_STRONG_PACE_BURST' \
+            lib/line.ts
+
+          grep -q \
+            'export async function sendLineText' \
+            lib/line.ts
+
+          if grep -q \
+            'confirmed-pace-budget-used' \
+            lib/line.ts
+          then
+            echo "ERROR: old confirmed pace logic detected"
+            exit 1
+          fi
+
+          if grep -q \
+            'test-budget-protected' \
+            lib/line.ts
+          then
+            echo "ERROR: old TEST budget logic detected"
+            exit 1
+          fi
+
+          echo "✅ Priority pacing source verified"
+
+      - name: TypeScript check
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [ -x node_modules/.bin/tsc ]; then
+            node_modules/.bin/tsc \
+              --noEmit \
+              --pretty false
+          else
+            echo "ℹ️ TypeScript compiler not installed; skipped"
+          fi
+
+      - name: Regression tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          for t in \
+            scripts/test-v11-r2-signal-policy.mjs \
+            scripts/test-v11-intelligence.mjs \
+            scripts/test-v11-r1-five-candle-truth.mjs
+          do
+            if [ -f "$t" ]; then
+              echo "▶ Running $t"
+              node "$t"
+            else
+              echo "ℹ️ Missing optional test: $t"
+            fi
+          done
+
+      - name: Production build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build
+
+      - name: Verify priority pacing policy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          s = Path("lib/line.ts").read_text()
+
+          required = [
+              'test-within-hard-pace',
+              'confirmed-within-priority-pace',
+              'strong-within-priority-pace',
+              'test-hard-pace-used',
+              'confirmed-pace-burst-used',
+              'strong-pace-burst-used',
+              'LINE_CONFIRMED_PACE_BURST',
+              'LINE_STRONG_PACE_BURST'
+          ]
+
+          for token in required:
+              if token not in s:
+                  raise SystemExit(
+                      f"ERROR: {token} missing"
+                  )
+
+          forbidden = [
+              'confirmed-pace-budget-used',
+              'test-budget-protected',
+              'hard-monthly-pace-used'
+          ]
+
+          for token in forbidden:
+              if token in s:
+                  raise SystemExit(
+                      f"ERROR: obsolete logic detected: {token}"
+                  )
+
+          print("✅ Final priority pacing policy verified")
+          PY
+
+      - name: Commit and push priority pacing
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          git config \
+            user.name \
+            "github-actions[bot]"
+
+          git config \
+            user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            lib/line.ts \
+            .env.example
+
+          if [ -f app/api/health/route.js ]; then
+            git add app/api/health/route.js
+          fi
+
+          git diff --cached --check
+
+          if git diff --cached --quiet; then
+            echo "✅ Priority quota pacing already installed."
+            exit 0
+          fi
+
+          git commit \
+            -m "Install R2.3 LINE priority quota pacing"
+
+          git push \
+            origin \
+            HEAD:main
+
+      - name: Done
+        run: |
+          echo "============================================"
+          echo "✅ R2.3 LINE PRIORITY PACING READY"
+          echo "✅ TEST pace: hard pace only"
+          echo "✅ CONFIRMED: hard pace +3"
+          echo "✅ STRONG: hard pace +5"
+          echo "✅ Monthly reserve: 45"
+          echo "✅ Daily base cap: 12"
+          echo "✅ STRONG daily burst: +2"
+          echo "✅ Reserve protected for ALL priorities"
+          echo "============================================"
