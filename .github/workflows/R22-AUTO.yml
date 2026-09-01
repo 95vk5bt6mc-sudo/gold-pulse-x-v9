@@ -44,46 +44,110 @@ jobs:
           import re
 
           p = Path("lib/line.ts")
+
           if not p.exists():
               raise SystemExit("ERROR: lib/line.ts not found")
 
           s = p.read_text()
 
           if "getLineQuotaSnapshot" not in s or "function quotaDecision" not in s:
-              raise SystemExit("ERROR: R2.1 LINE quota guard not found")
+              raise SystemExit("ERROR: LINE quota guard not found")
+
+          # ---------------------------------------------------------
+          # MONTHLY RESERVE
+          # ---------------------------------------------------------
 
           s = s.replace(
               'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 30, 0, 10000)',
               'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000)'
           )
 
-          start = s.find("function quotaDecision(snapshot: LineQuotaSnapshot, priority: LinePriority) {")
-          end = s.find("\nfunction deterministicUuid", start)
+          # ---------------------------------------------------------
+          # LOCATE quotaDecision()
+          # ---------------------------------------------------------
+
+          start = s.find(
+              "function quotaDecision(snapshot: LineQuotaSnapshot, priority: LinePriority) {"
+          )
+
+          end = s.find(
+              "\nfunction deterministicUuid",
+              start
+          )
 
           if start < 0 or end < 0:
-              raise SystemExit("ERROR: unsupported lib/line.ts layout")
+              raise SystemExit(
+                  "ERROR: unsupported lib/line.ts layout"
+              )
+
+          # ---------------------------------------------------------
+          # R2.2 QUOTA GUARD
+          #
+          # Order:
+          #
+          # 1. Monthly quota exhausted
+          # 2. Daily cap
+          # 3. Hard monthly pace
+          # 4. STRONG
+          # 5. Reserve protection
+          # 6. TEST within hard pace
+          # 7. CONFIRMED standard pace
+          #
+          # TEST is intentionally evaluated BEFORE
+          # confirmed-pace-budget-used.
+          # ---------------------------------------------------------
 
           replacement = '''function quotaDecision(snapshot: LineQuotaSnapshot, priority: LinePriority) {
             if (!snapshot.checked || !snapshot.limited || snapshot.remaining == null) {
-              return { allowed: true, reason: "quota-unlimited-or-unavailable" };
+              return {
+                allowed: true,
+                reason: "quota-unlimited-or-unavailable"
+              };
             }
 
             if (snapshot.remaining <= 0) {
-              return { allowed: false, reason: "monthly-quota-exhausted" };
+              return {
+                allowed: false,
+                reason: "monthly-quota-exhausted"
+              };
             }
 
             const hardPacedBudget = snapshot.monthlyLimit != null
-              ? Math.floor(snapshot.monthlyLimit * (snapshot.businessDaysElapsed / snapshot.businessDaysTotal))
+              ? Math.floor(
+                  snapshot.monthlyLimit *
+                  (snapshot.businessDaysElapsed / snapshot.businessDaysTotal)
+                )
               : null;
 
-            const dailyCap = integerEnv("LINE_DAILY_PUSH_CAP", 12, 1, 10000);
-            const strongBurst = integerEnv("LINE_STRONG_DAILY_BURST", 2, 0, 1000);
-            const dailyLimit = priority === "strong" ? dailyCap + strongBurst : dailyCap;
+            const dailyCap = integerEnv(
+              "LINE_DAILY_PUSH_CAP",
+              12,
+              1,
+              10000
+            );
 
-            if (snapshot.dailyUsed != null && snapshot.dailyUsed >= dailyLimit) {
+            const strongBurst = integerEnv(
+              "LINE_STRONG_DAILY_BURST",
+              2,
+              0,
+              1000
+            );
+
+            const dailyLimit =
+              priority === "strong"
+                ? dailyCap + strongBurst
+                : dailyCap;
+
+            if (
+              snapshot.dailyUsed != null &&
+              snapshot.dailyUsed >= dailyLimit
+            ) {
               return {
                 allowed: false,
-                reason: priority === "strong" ? "strong-daily-cap-used" : "daily-cap-used"
+                reason:
+                  priority === "strong"
+                    ? "strong-daily-cap-used"
+                    : "daily-cap-used"
               };
             }
 
@@ -92,48 +156,120 @@ jobs:
               snapshot.totalUsage != null &&
               snapshot.totalUsage >= hardPacedBudget
             ) {
-              return { allowed: false, reason: "hard-monthly-pace-used" };
+              return {
+                allowed: false,
+                reason: "hard-monthly-pace-used"
+              };
             }
 
             if (priority === "strong") {
               return {
                 allowed: true,
-                reason: snapshot.survivalMode
-                  ? "strong-within-hard-pace-reserve"
-                  : "strong-within-hard-pace"
+                reason:
+                  snapshot.survivalMode
+                    ? "strong-within-hard-pace-reserve"
+                    : "strong-within-hard-pace"
               };
             }
 
-            if (snapshot.survivalMode || snapshot.remaining <= snapshot.reserve) {
-              return { allowed: false, reason: "reserve-protected" };
-            }
-
-            if (snapshot.budgetHeadroom != null && snapshot.budgetHeadroom <= 0) {
-              return { allowed: false, reason: "confirmed-pace-budget-used" };
+            if (
+              snapshot.survivalMode ||
+              snapshot.remaining <= snapshot.reserve
+            ) {
+              return {
+                allowed: false,
+                reason: "reserve-protected"
+              };
             }
 
             if (priority === "test") {
-              if (snapshot.remainingPercent != null && snapshot.remainingPercent <= 25) {
-                return { allowed: false, reason: "test-reserve-protected" };
+              if (
+                snapshot.remainingPercent != null &&
+                snapshot.remainingPercent <= 25
+              ) {
+                return {
+                  allowed: false,
+                  reason: "test-reserve-protected"
+                };
               }
 
-              if (snapshot.budgetHeadroom != null && snapshot.budgetHeadroom < 3) {
-                return { allowed: false, reason: "test-budget-protected" };
-              }
+              return {
+                allowed: true,
+                reason: "test-within-hard-pace"
+              };
             }
 
-            return { allowed: true, reason: "within-r22-paced-budget" };
+            if (
+              snapshot.budgetHeadroom != null &&
+              snapshot.budgetHeadroom <= 0
+            ) {
+              return {
+                allowed: false,
+                reason: "confirmed-pace-budget-used"
+              };
+            }
+
+            return {
+              allowed: true,
+              reason: "within-r22-paced-budget"
+            };
           }
           '''
 
+          # ---------------------------------------------------------
+          # APPLY PATCH
+          # ---------------------------------------------------------
+
           s = s[:start] + replacement + s[end:]
+
+          # ---------------------------------------------------------
+          # SANITY CHECK
+          # Prevent old quota logic from being reinstalled.
+          # ---------------------------------------------------------
+
+          test_pos = s.find(
+              'reason: "test-within-hard-pace"'
+          )
+
+          confirmed_pos = s.find(
+              'reason: "confirmed-pace-budget-used"'
+          )
+
+          if test_pos < 0:
+              raise SystemExit(
+                  "ERROR: test-within-hard-pace guard missing"
+              )
+
+          if confirmed_pos < 0:
+              raise SystemExit(
+                  "ERROR: confirmed quota guard missing"
+              )
+
+          if test_pos > confirmed_pos:
+              raise SystemExit(
+                  "ERROR: TEST guard must run before confirmed pace guard"
+              )
+
+          if 'reason: "test-budget-protected"' in s:
+              raise SystemExit(
+                  "ERROR: obsolete test-budget-protected logic still exists"
+              )
+
           p.write_text(s)
+
+          # ---------------------------------------------------------
+          # ENV EXAMPLE
+          # ---------------------------------------------------------
 
           env = Path(".env.example")
           e = env.read_text() if env.exists() else ""
 
           if "LINE_MONTHLY_RESERVE_MESSAGES=" in e:
-              e = re.sub(r"LINE_MONTHLY_RESERVE_MESSAGES=\d+", "LINE_MONTHLY_RESERVE_MESSAGES=45", e)
+              e = re.sub(
+                  r"LINE_MONTHLY_RESERVE_MESSAGES=\d+",
+                  "LINE_MONTHLY_RESERVE_MESSAGES=45",
+                  e
+              )
           else:
               e += "\nLINE_MONTHLY_RESERVE_MESSAGES=45\n"
 
@@ -145,20 +281,49 @@ jobs:
 
           env.write_text(e)
 
+          # ---------------------------------------------------------
+          # HEALTH VERSION
+          # ---------------------------------------------------------
+
           health = Path("app/api/health/route.js")
+
           if health.exists():
               h = health.read_text()
-              h = h.replace('version: "R2.1-SMART-QUOTA-1"', 'version: "R2.2-QUOTA-SURVIVAL-1"')
-              h = h.replace("monthlyReserveDefault: 30", "monthlyReserveDefault: 45")
+
+              h = h.replace(
+                  'version: "R2.1-SMART-QUOTA-1"',
+                  'version: "R2.2-QUOTA-SURVIVAL-2"'
+              )
+
+              h = h.replace(
+                  'version: "R2.2-QUOTA-SURVIVAL-1"',
+                  'version: "R2.2-QUOTA-SURVIVAL-2"'
+              )
+
+              h = h.replace(
+                  "monthlyReserveDefault: 30",
+                  "monthlyReserveDefault: 45"
+              )
+
               health.write_text(h)
+
+          print("✅ R2.2 LINE quota guard patched")
+          print("✅ TEST executes before confirmed pace guard")
+          print("✅ TEST allowed only inside hard monthly pace")
+          print("✅ Reserve protection preserved")
+          print("✅ Daily cap preserved")
+          print("✅ Monthly hard pace preserved")
           PY
 
       - name: TypeScript check
         shell: bash
         run: |
           set -Eeuo pipefail
+
           if [ -x node_modules/.bin/tsc ]; then
-            node_modules/.bin/tsc --noEmit --pretty false
+            node_modules/.bin/tsc \
+              --noEmit \
+              --pretty false
           fi
 
       - name: Regression tests
@@ -172,6 +337,7 @@ jobs:
             scripts/test-v11-r1-five-candle-truth.mjs
           do
             if [ -f "$t" ]; then
+              echo "Running $t"
               node "$t"
             fi
           done
@@ -181,15 +347,46 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
         run: npm run build
 
+      - name: Verify patched quota guard
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          grep -q \
+            'reason: "test-within-hard-pace"' \
+            lib/line.ts
+
+          grep -q \
+            'reason: "confirmed-pace-budget-used"' \
+            lib/line.ts
+
+          if grep -q \
+            'reason: "test-budget-protected"' \
+            lib/line.ts
+          then
+            echo "ERROR: obsolete test-budget-protected logic detected"
+            exit 1
+          fi
+
+          echo "✅ Runtime quota guard verified"
+
       - name: Commit and push R2.2
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config \
+            user.name \
+            "github-actions[bot]"
 
-          git add lib/line.ts .env.example
+          git config \
+            user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            lib/line.ts \
+            .env.example
+
           if [ -f app/api/health/route.js ]; then
             git add app/api/health/route.js
           fi
@@ -201,13 +398,21 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Install R2.2 LINE quota survival"
-          git push origin HEAD:main
+          git commit \
+            -m "Install R2.2 synchronized LINE quota guard"
+
+          git push \
+            origin \
+            HEAD:main
 
       - name: Done
         run: |
           echo "✅ R2.2 installed"
-          echo "✅ Reserve: 45"
+          echo "✅ Monthly reserve: 45"
           echo "✅ Daily cap: 12"
           echo "✅ STRONG burst: +2"
-          echo "✅ STRONG cannot bypass monthly pace"
+          echo "✅ TEST works inside hard pace"
+          echo "✅ TEST cannot consume reserve"
+          echo "✅ CONFIRMED remains paced"
+          echo "✅ STRONG cannot bypass monthly hard pace"
+          echo "✅ Runtime and installer quota logic synchronized"
