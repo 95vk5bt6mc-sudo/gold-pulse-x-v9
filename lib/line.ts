@@ -137,12 +137,7 @@ export async function getLineQuotaSnapshot(
 ): Promise<LineQuotaSnapshot> {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
-  const reserve = integerEnv(
-    "LINE_MONTHLY_RESERVE_MESSAGES",
-    45,
-    0,
-    10000
-  );
+  const reserve = integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000);
 
   const date = bangkokDateParts();
 
@@ -339,16 +334,24 @@ function quotaDecision(
     };
   }
 
-  const hardPacedBudget =
-    snapshot.monthlyLimit != null
-      ? Math.floor(
-          snapshot.monthlyLimit *
-          (
-            snapshot.businessDaysElapsed /
-            snapshot.businessDaysTotal
-          )
-        )
-      : null;
+  // -------------------------------------------------------
+  // Reserve protection
+  // Applies to ALL priorities.
+  // -------------------------------------------------------
+
+  if (
+    snapshot.survivalMode ||
+    snapshot.remaining <= snapshot.reserve
+  ) {
+    return {
+      allowed: false,
+      reason: "reserve-protected"
+    };
+  }
+
+  // -------------------------------------------------------
+  // Daily cap
+  // -------------------------------------------------------
 
   const dailyCap = integerEnv(
     "LINE_DAILY_PUSH_CAP",
@@ -357,7 +360,7 @@ function quotaDecision(
     10000
   );
 
-  const strongBurst = integerEnv(
+  const strongDailyBurst = integerEnv(
     "LINE_STRONG_DAILY_BURST",
     2,
     0,
@@ -366,7 +369,7 @@ function quotaDecision(
 
   const dailyLimit =
     priority === "strong"
-      ? dailyCap + strongBurst
+      ? dailyCap + strongDailyBurst
       : dailyCap;
 
   if (
@@ -382,67 +385,140 @@ function quotaDecision(
     };
   }
 
+  // -------------------------------------------------------
+  // Base hard monthly pace
+  // -------------------------------------------------------
+
+  const hardPacedBudget =
+    snapshot.monthlyLimit != null
+      ? Math.floor(
+          snapshot.monthlyLimit *
+          (
+            snapshot.businessDaysElapsed /
+            snapshot.businessDaysTotal
+          )
+        )
+      : null;
+
+  // -------------------------------------------------------
+  // Priority burst allowances
+  // -------------------------------------------------------
+
+  const confirmedPaceBurst = integerEnv(
+    "LINE_CONFIRMED_PACE_BURST",
+    3,
+    0,
+    1000
+  );
+
+  const strongPaceBurst = integerEnv(
+    "LINE_STRONG_PACE_BURST",
+    5,
+    0,
+    1000
+  );
+
+  const paceBurst =
+    priority === "strong"
+      ? strongPaceBurst
+      : priority === "confirmed"
+        ? confirmedPaceBurst
+        : 0;
+
+  // -------------------------------------------------------
+  // Never allow priority burst to consume reserve.
+  // -------------------------------------------------------
+
+  const spendableLimit =
+    snapshot.monthlyLimit != null
+      ? Math.max(
+          0,
+          snapshot.monthlyLimit - snapshot.reserve
+        )
+      : null;
+
+  const rawPriorityPacedBudget =
+    hardPacedBudget != null
+      ? hardPacedBudget + paceBurst
+      : null;
+
+  const priorityPacedBudget =
+    rawPriorityPacedBudget != null &&
+    spendableLimit != null
+      ? Math.min(
+          rawPriorityPacedBudget,
+          spendableLimit
+        )
+      : rawPriorityPacedBudget;
+
+  // -------------------------------------------------------
+  // Priority pacing ceiling
+  // -------------------------------------------------------
+
   if (
-    hardPacedBudget != null &&
+    priorityPacedBudget != null &&
     snapshot.totalUsage != null &&
-    snapshot.totalUsage >= hardPacedBudget
+    snapshot.totalUsage >= priorityPacedBudget
   ) {
-    return {
-      allowed: false,
-      reason: "hard-monthly-pace-used"
-    };
-  }
-
-  if (priority === "strong") {
-    return {
-      allowed: true,
-      reason:
-        snapshot.survivalMode
-          ? "strong-within-hard-pace-reserve"
-          : "strong-within-hard-pace"
-    };
-  }
-
-  if (
-    snapshot.survivalMode ||
-    snapshot.remaining <= snapshot.reserve
-  ) {
-    return {
-      allowed: false,
-      reason: "reserve-protected"
-    };
-  }
-
-  if (priority === "test") {
-    if (
-      snapshot.remainingPercent != null &&
-      snapshot.remainingPercent <= 25
-    ) {
+    if (priority === "strong") {
       return {
         allowed: false,
-        reason: "test-reserve-protected"
+        reason: "strong-pace-burst-used"
+      };
+    }
+
+    if (priority === "confirmed") {
+      return {
+        allowed: false,
+        reason: "confirmed-pace-burst-used"
       };
     }
 
     return {
-      allowed: true,
-      reason: "test-within-hard-pace"
+      allowed: false,
+      reason: "test-hard-pace-used"
     };
   }
 
+  // -------------------------------------------------------
+  // STRONG
+  // -------------------------------------------------------
+
+  if (priority === "strong") {
+    return {
+      allowed: true,
+      reason: "strong-within-priority-pace"
+    };
+  }
+
+  // -------------------------------------------------------
+  // CONFIRMED
+  // -------------------------------------------------------
+
+  if (priority === "confirmed") {
+    return {
+      allowed: true,
+      reason: "confirmed-within-priority-pace"
+    };
+  }
+
+  // -------------------------------------------------------
+  // TEST
+  // -------------------------------------------------------
+
   if (
-    snapshot.budgetHeadroom != null &&
-    snapshot.budgetHeadroom <= 0
+    snapshot.remainingPercent != null &&
+    snapshot.remainingPercent <= 25
   ) {
     return {
       allowed: false,
-      reason: "confirmed-pace-budget-used"
+      reason: "test-reserve-protected"
     };
   }
 
   return {
     allowed: true,
-    reason: "within-r22-paced-budget"
+    reason: "test-within-hard-pace"
   };
 }
 
