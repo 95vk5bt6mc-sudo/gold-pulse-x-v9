@@ -1,7 +1,13 @@
 name: GOLD PULSE Server Scan
 
 on:
-   workflow_dispatch:
+  schedule:
+    # GitHub Actions cron uses UTC.
+    # 01:00-17:59 UTC = 08:00-00:59 Asia/Bangkok.
+    # Run every 5 minutes, Monday-Friday.
+    - cron: "*/5 1-17 * * 1-5"
+
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,22 +20,69 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 2
+
     steps:
       - name: Validate secrets
         env:
           GOLD_PULSE_URL: ${{ secrets.GOLD_PULSE_URL }}
           GOLD_PULSE_API_SECRET: ${{ secrets.GOLD_PULSE_API_SECRET }}
         run: |
-          test -n "$GOLD_PULSE_URL" || (echo "Missing GOLD_PULSE_URL" && exit 1)
-          test -n "$GOLD_PULSE_API_SECRET" || (echo "Missing GOLD_PULSE_API_SECRET" && exit 1)
+          set -Eeuo pipefail
+
+          test -n "$GOLD_PULSE_URL" || {
+            echo "ERROR: Missing GOLD_PULSE_URL"
+            exit 1
+          }
+
+          test -n "$GOLD_PULSE_API_SECRET" || {
+            echo "ERROR: Missing GOLD_PULSE_API_SECRET"
+            exit 1
+          }
+
+          echo "✅ Required secrets are configured"
 
       - name: Scan XAU/USD and evaluate LINE alert
         env:
           GOLD_PULSE_URL: ${{ secrets.GOLD_PULSE_URL }}
           GOLD_PULSE_API_SECRET: ${{ secrets.GOLD_PULSE_API_SECRET }}
         run: |
+          set -Eeuo pipefail
+
           BASE="${GOLD_PULSE_URL%/}"
-          curl --fail-with-body --silent --show-error \
-            --retry 2 --retry-all-errors --retry-delay 2 --max-time 55 \
-            -H "x-gold-pulse-secret: $GOLD_PULSE_API_SECRET" \
-            "$BASE/api/scan"
+
+          echo "▶ GOLD PULSE scheduled scan"
+          echo "UTC time: $(date -u '+%Y-%m-%d %H:%M:%S')"
+          echo "Endpoint: $BASE/api/scan"
+
+          RESPONSE_FILE="$(mktemp)"
+
+          HTTP_STATUS="$(
+            curl \
+              --silent \
+              --show-error \
+              --location \
+              --retry 2 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --connect-timeout 10 \
+              --max-time 55 \
+              --output "$RESPONSE_FILE" \
+              --write-out "%{http_code}" \
+              -H "x-gold-pulse-secret: $GOLD_PULSE_API_SECRET" \
+              "$BASE/api/scan"
+          )"
+
+          echo "HTTP status: $HTTP_STATUS"
+
+          if [ -s "$RESPONSE_FILE" ]; then
+            echo "Response:"
+            cat "$RESPONSE_FILE"
+            echo
+          fi
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "❌ GOLD PULSE scan failed"
+            exit 1
+          fi
+
+          echo "✅ GOLD PULSE scan completed"
