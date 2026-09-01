@@ -43,62 +43,112 @@ jobs:
           from pathlib import Path
           import re
 
+          # =========================================================
+          # LOAD lib/line.ts
+          # =========================================================
+
           p = Path("lib/line.ts")
 
           if not p.exists():
-              raise SystemExit("ERROR: lib/line.ts not found")
+              raise SystemExit(
+                  "ERROR: lib/line.ts not found"
+              )
 
           s = p.read_text()
 
-          if "getLineQuotaSnapshot" not in s or "function quotaDecision" not in s:
-              raise SystemExit("ERROR: LINE quota guard not found")
+          if "getLineQuotaSnapshot" not in s:
+              raise SystemExit(
+                  "ERROR: getLineQuotaSnapshot() not found"
+              )
 
-          # ---------------------------------------------------------
-          # MONTHLY RESERVE
-          # ---------------------------------------------------------
+          if "quotaDecision" not in s:
+              raise SystemExit(
+                  "ERROR: quotaDecision() not found"
+              )
+
+          # =========================================================
+          # MONTHLY RESERVE DEFAULT
+          # =========================================================
 
           s = s.replace(
               'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 30, 0, 10000)',
               'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000)'
           )
 
-          # ---------------------------------------------------------
-          # LOCATE quotaDecision()
-          # ---------------------------------------------------------
+          # =========================================================
+          # FIND quotaDecision()
+          #
+          # Robust detection:
+          # supports both:
+          #
+          # function quotaDecision(snapshot: ..., priority: ...) {
+          #
+          # and:
+          #
+          # function quotaDecision(
+          #   snapshot: ...,
+          #   priority: ...
+          # ) {
+          #
+          # =========================================================
 
-          start = s.find(
-              "function quotaDecision(snapshot: LineQuotaSnapshot, priority: LinePriority) {"
+          match = re.search(
+              r"function\s+quotaDecision\s*\(\s*"
+              r"snapshot\s*:\s*LineQuotaSnapshot\s*,\s*"
+              r"priority\s*:\s*LinePriority\s*"
+              r"\)\s*\{",
+              s,
+              re.MULTILINE
           )
 
-          end = s.find(
-              "\nfunction deterministicUuid",
-              start
-          )
-
-          if start < 0 or end < 0:
+          if not match:
               raise SystemExit(
-                  "ERROR: unsupported lib/line.ts layout"
+                  "ERROR: quotaDecision() signature not found in lib/line.ts"
               )
 
-          # ---------------------------------------------------------
-          # R2.2 QUOTA GUARD
-          #
-          # Order:
-          #
-          # 1. Monthly quota exhausted
-          # 2. Daily cap
-          # 3. Hard monthly pace
-          # 4. STRONG
-          # 5. Reserve protection
-          # 6. TEST within hard pace
-          # 7. CONFIRMED standard pace
-          #
-          # TEST is intentionally evaluated BEFORE
-          # confirmed-pace-budget-used.
-          # ---------------------------------------------------------
+          start = match.start()
 
-          replacement = '''function quotaDecision(snapshot: LineQuotaSnapshot, priority: LinePriority) {
-            if (!snapshot.checked || !snapshot.limited || snapshot.remaining == null) {
+          next_function = re.search(
+              r"\nfunction\s+deterministicUuid\s*\(",
+              s[match.end():],
+              re.MULTILINE
+          )
+
+          if not next_function:
+              raise SystemExit(
+                  "ERROR: deterministicUuid() boundary not found"
+              )
+
+          end = match.end() + next_function.start()
+
+          # =========================================================
+          # SYNCHRONIZED R2.2 QUOTA GUARD
+          #
+          # Safety order:
+          #
+          # 1. quota availability
+          # 2. monthly exhaustion
+          # 3. daily cap
+          # 4. hard monthly pace
+          # 5. STRONG
+          # 6. reserve protection
+          # 7. TEST inside hard pace
+          # 8. CONFIRMED standard pace
+          #
+          # Critical:
+          # TEST must execute BEFORE
+          # confirmed-pace-budget-used.
+          # =========================================================
+
+          replacement = '''function quotaDecision(
+            snapshot: LineQuotaSnapshot,
+            priority: LinePriority
+          ) {
+            if (
+              !snapshot.checked ||
+              !snapshot.limited ||
+              snapshot.remaining == null
+            ) {
               return {
                 allowed: true,
                 reason: "quota-unlimited-or-unavailable"
@@ -112,12 +162,16 @@ jobs:
               };
             }
 
-            const hardPacedBudget = snapshot.monthlyLimit != null
-              ? Math.floor(
-                  snapshot.monthlyLimit *
-                  (snapshot.businessDaysElapsed / snapshot.businessDaysTotal)
-                )
-              : null;
+            const hardPacedBudget =
+              snapshot.monthlyLimit != null
+                ? Math.floor(
+                    snapshot.monthlyLimit *
+                    (
+                      snapshot.businessDaysElapsed /
+                      snapshot.businessDaysTotal
+                    )
+                  )
+                : null;
 
             const dailyCap = integerEnv(
               "LINE_DAILY_PUSH_CAP",
@@ -216,16 +270,15 @@ jobs:
           }
           '''
 
-          # ---------------------------------------------------------
+          # =========================================================
           # APPLY PATCH
-          # ---------------------------------------------------------
+          # =========================================================
 
           s = s[:start] + replacement + s[end:]
 
-          # ---------------------------------------------------------
+          # =========================================================
           # SANITY CHECK
-          # Prevent old quota logic from being reinstalled.
-          # ---------------------------------------------------------
+          # =========================================================
 
           test_pos = s.find(
               'reason: "test-within-hard-pace"'
@@ -237,17 +290,17 @@ jobs:
 
           if test_pos < 0:
               raise SystemExit(
-                  "ERROR: test-within-hard-pace guard missing"
+                  "ERROR: test-within-hard-pace is missing"
               )
 
           if confirmed_pos < 0:
               raise SystemExit(
-                  "ERROR: confirmed quota guard missing"
+                  "ERROR: confirmed-pace-budget-used is missing"
               )
 
           if test_pos > confirmed_pos:
               raise SystemExit(
-                  "ERROR: TEST guard must run before confirmed pace guard"
+                  "ERROR: TEST guard is after confirmed pace guard"
               )
 
           if 'reason: "test-budget-protected"' in s:
@@ -255,11 +308,21 @@ jobs:
                   "ERROR: obsolete test-budget-protected logic still exists"
               )
 
+          if "export async function sendLineText" not in s:
+              raise SystemExit(
+                  "ERROR: sendLineText() disappeared after patch"
+              )
+
+          if "getLineQuotaSnapshot" not in s:
+              raise SystemExit(
+                  "ERROR: getLineQuotaSnapshot() disappeared after patch"
+              )
+
           p.write_text(s)
 
-          # ---------------------------------------------------------
-          # ENV EXAMPLE
-          # ---------------------------------------------------------
+          # =========================================================
+          # .env.example
+          # =========================================================
 
           env = Path(".env.example")
           e = env.read_text() if env.exists() else ""
@@ -271,7 +334,9 @@ jobs:
                   e
               )
           else:
-              e += "\nLINE_MONTHLY_RESERVE_MESSAGES=45\n"
+              if e and not e.endswith("\n"):
+                  e += "\n"
+              e += "LINE_MONTHLY_RESERVE_MESSAGES=45\n"
 
           if "LINE_DAILY_PUSH_CAP=" not in e:
               e += "LINE_DAILY_PUSH_CAP=12\n"
@@ -281,9 +346,9 @@ jobs:
 
           env.write_text(e)
 
-          # ---------------------------------------------------------
+          # =========================================================
           # HEALTH VERSION
-          # ---------------------------------------------------------
+          # =========================================================
 
           health = Path("app/api/health/route.js")
 
@@ -307,13 +372,48 @@ jobs:
 
               health.write_text(h)
 
-          print("✅ R2.2 LINE quota guard patched")
-          print("✅ TEST executes before confirmed pace guard")
-          print("✅ TEST allowed only inside hard monthly pace")
+          print("✅ quotaDecision() located")
+          print("✅ R2.2 quota guard synchronized")
+          print("✅ TEST executes before CONFIRMED pace guard")
+          print("✅ TEST allowed only inside hard pace")
           print("✅ Reserve protection preserved")
           print("✅ Daily cap preserved")
-          print("✅ Monthly hard pace preserved")
+          print("✅ Hard monthly pace preserved")
+          print("✅ sendLineText() preserved")
           PY
+
+      - name: Verify patched source structure
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test -f lib/line.ts
+
+          grep -q \
+            'test-within-hard-pace' \
+            lib/line.ts
+
+          grep -q \
+            'confirmed-pace-budget-used' \
+            lib/line.ts
+
+          grep -q \
+            'export async function sendLineText' \
+            lib/line.ts
+
+          grep -q \
+            'getLineQuotaSnapshot' \
+            lib/line.ts
+
+          if grep -q \
+            'test-budget-protected' \
+            lib/line.ts
+          then
+            echo "ERROR: obsolete test-budget-protected logic detected"
+            exit 1
+          fi
+
+          echo "✅ Source structure verified"
 
       - name: TypeScript check
         shell: bash
@@ -324,6 +424,8 @@ jobs:
             node_modules/.bin/tsc \
               --noEmit \
               --pretty false
+          else
+            echo "ℹ️ TypeScript compiler not installed; skipped"
           fi
 
       - name: Regression tests
@@ -337,8 +439,10 @@ jobs:
             scripts/test-v11-r1-five-candle-truth.mjs
           do
             if [ -f "$t" ]; then
-              echo "Running $t"
+              echo "▶ Running $t"
               node "$t"
+            else
+              echo "ℹ️ Missing optional test: $t"
             fi
           done
 
@@ -347,28 +451,46 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
         run: npm run build
 
-      - name: Verify patched quota guard
+      - name: Verify final quota guard
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          grep -q \
-            'reason: "test-within-hard-pace"' \
-            lib/line.ts
+          python3 <<'PY'
+          from pathlib import Path
 
-          grep -q \
-            'reason: "confirmed-pace-budget-used"' \
-            lib/line.ts
+          s = Path("lib/line.ts").read_text()
 
-          if grep -q \
-            'reason: "test-budget-protected"' \
-            lib/line.ts
-          then
-            echo "ERROR: obsolete test-budget-protected logic detected"
-            exit 1
-          fi
+          test_pos = s.find(
+              'reason: "test-within-hard-pace"'
+          )
 
-          echo "✅ Runtime quota guard verified"
+          confirmed_pos = s.find(
+              'reason: "confirmed-pace-budget-used"'
+          )
+
+          if test_pos < 0:
+              raise SystemExit(
+                  "ERROR: TEST guard missing"
+              )
+
+          if confirmed_pos < 0:
+              raise SystemExit(
+                  "ERROR: CONFIRMED guard missing"
+              )
+
+          if test_pos > confirmed_pos:
+              raise SystemExit(
+                  "ERROR: TEST guard order is incorrect"
+              )
+
+          if 'reason: "test-budget-protected"' in s:
+              raise SystemExit(
+                  "ERROR: obsolete TEST guard returned"
+              )
+
+          print("✅ Final quota guard verified")
+          PY
 
       - name: Commit and push R2.2
         shell: bash
@@ -394,12 +516,13 @@ jobs:
           git diff --cached --check
 
           if git diff --cached --quiet; then
-            echo "R2.2 is already installed. No changes to push."
+            echo "✅ R2.2 is already synchronized."
+            echo "No changes to push."
             exit 0
           fi
 
           git commit \
-            -m "Install R2.2 synchronized LINE quota guard"
+            -m "Install synchronized R2.2 LINE quota guard"
 
           git push \
             origin \
@@ -407,12 +530,14 @@ jobs:
 
       - name: Done
         run: |
-          echo "✅ R2.2 installed"
+          echo "========================================="
+          echo "✅ R2.2 Auto Installer completed"
           echo "✅ Monthly reserve: 45"
           echo "✅ Daily cap: 12"
           echo "✅ STRONG burst: +2"
           echo "✅ TEST works inside hard pace"
           echo "✅ TEST cannot consume reserve"
-          echo "✅ CONFIRMED remains paced"
-          echo "✅ STRONG cannot bypass monthly hard pace"
-          echo "✅ Runtime and installer quota logic synchronized"
+          echo "✅ CONFIRMED remains standard-paced"
+          echo "✅ STRONG cannot bypass hard monthly pace"
+          echo "✅ Runtime and installer logic synchronized"
+          echo "========================================="
