@@ -1,11 +1,6 @@
 name: Scheduler Smoke Test
 
 on:
-  schedule:
-    # TEMPORARY TEST ONLY
-    # Runs at minute 02,07,12,17...57 every hour (UTC)
-    - cron: "2-57/5 * * * *"
-
   workflow_dispatch:
 
 permissions:
