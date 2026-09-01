@@ -1,0 +1,39 @@
+name: Scheduler Smoke Test
+
+on:
+  schedule:
+    # TEMPORARY TEST ONLY
+    # Runs at minute 02,07,12,17...57 every hour (UTC)
+    - cron: "2-57/5 * * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Confirm scheduler execution
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          echo "================================="
+          echo "GITHUB SCHEDULER SMOKE TEST"
+          echo "================================="
+          echo "Event: ${{ github.event_name }}"
+          echo "UTC: $(date -u '+%Y-%m-%d %H:%M:%S')"
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "================================="
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "✅ TRUE SCHEDULED RUN"
+          else
+            echo "ℹ️ Not a scheduled event: ${{ github.event_name }}"
+          fi
