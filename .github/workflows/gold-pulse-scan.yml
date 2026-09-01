@@ -5,7 +5,7 @@ on:
     # TEMPORARY SCHEDULER TEST
     # GitHub Action cron uses UTC.
     # Run at minute 03,08,13,18...58 every hour.
-    - cron: "*/3-58/5 * * * *"
+    - cron: "3-58/5 * * * *"
 
   workflow_dispatch:
 
