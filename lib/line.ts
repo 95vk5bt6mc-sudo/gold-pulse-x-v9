@@ -328,16 +328,14 @@ function quotaDecision(
   ) {
     return {
       allowed: true,
-      reason:
-        "quota-unlimited-or-unavailable"
+      reason: "quota-unlimited-or-unavailable"
     };
   }
 
   if (snapshot.remaining <= 0) {
     return {
       allowed: false,
-      reason:
-        "monthly-quota-exhausted"
+      reason: "monthly-quota-exhausted"
     };
   }
 
@@ -345,10 +343,10 @@ function quotaDecision(
     snapshot.monthlyLimit != null
       ? Math.floor(
           snapshot.monthlyLimit *
-            (
-              snapshot.businessDaysElapsed /
-              snapshot.businessDaysTotal
-            )
+          (
+            snapshot.businessDaysElapsed /
+            snapshot.businessDaysTotal
+          )
         )
       : null;
 
@@ -387,13 +385,11 @@ function quotaDecision(
   if (
     hardPacedBudget != null &&
     snapshot.totalUsage != null &&
-    snapshot.totalUsage >=
-      hardPacedBudget
+    snapshot.totalUsage >= hardPacedBudget
   ) {
     return {
       allowed: false,
-      reason:
-        "hard-monthly-pace-used"
+      reason: "hard-monthly-pace-used"
     };
   }
 
@@ -409,13 +405,11 @@ function quotaDecision(
 
   if (
     snapshot.survivalMode ||
-    snapshot.remaining <=
-      snapshot.reserve
+    snapshot.remaining <= snapshot.reserve
   ) {
     return {
       allowed: false,
-      reason:
-        "reserve-protected"
+      reason: "reserve-protected"
     };
   }
 
@@ -426,15 +420,13 @@ function quotaDecision(
     ) {
       return {
         allowed: false,
-        reason:
-          "test-reserve-protected"
+        reason: "test-reserve-protected"
       };
     }
 
     return {
       allowed: true,
-      reason:
-        "test-within-hard-pace"
+      reason: "test-within-hard-pace"
     };
   }
 
@@ -444,15 +436,13 @@ function quotaDecision(
   ) {
     return {
       allowed: false,
-      reason:
-        "confirmed-pace-budget-used"
+      reason: "confirmed-pace-budget-used"
     };
   }
 
   return {
     allowed: true,
-    reason:
-      "within-r22-paced-budget"
+    reason: "within-r22-paced-budget"
   };
 }
 
