@@ -2,9 +2,9 @@ name: GOLD PULSE Server Scan
 
 on:
   schedule:
-    # GitHub Actions cron uses UTC.
-    # 01:00-17:59 UTC = 08:00-00:59 Asia/Bangkok.
-    # Run every 5 minutes, Monday-Friday.
+    # TEMPORARY SCHEDULER TEST
+    # GitHub Action cron uses UTC.
+    # Run every 5 minutes, every day, all hours.
     - cron: "*/5 * * * *"
 
   workflow_dispatch:
