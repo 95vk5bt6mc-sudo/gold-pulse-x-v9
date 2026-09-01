@@ -4,8 +4,8 @@ on:
   schedule:
     # TEMPORARY SCHEDULER TEST
     # GitHub Action cron uses UTC.
-    # Run every 5 minutes, every day, all hours.
-    - cron: "*/5 * * * *"
+    # Run at minute 03,08,13,18...58 every hour.
+    - cron: "*/3-58/5 * * * *"
 
   workflow_dispatch:
 
