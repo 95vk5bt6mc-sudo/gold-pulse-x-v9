@@ -2,9 +2,11 @@ name: R22 Auto Installer
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - ".github/workflows/R22-AUTO.yml"
+
   workflow_dispatch:
 
 permissions:
@@ -34,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Patch R2.2 LINE quota survival
+      - name: Patch R2.3 LINE priority quota pacing
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -66,20 +68,25 @@ jobs:
                   "ERROR: quotaDecision() not found"
               )
 
+          if "export async function sendLineText" not in s:
+              raise SystemExit(
+                  "ERROR: sendLineText() not found"
+              )
+
           # =========================================================
-          # MONTHLY RESERVE DEFAULT
+          # RESERVE DEFAULT
           # =========================================================
 
-          s = s.replace(
-              'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 30, 0, 10000)',
-              'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000)'
+          s = re.sub(
+              r'integerEnv\(\s*"LINE_MONTHLY_RESERVE_MESSAGES"\s*,\s*\d+\s*,\s*0\s*,\s*10000\s*\)',
+              'integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000)',
+              s
           )
 
           # =========================================================
-          # FIND quotaDecision()
+          # LOCATE quotaDecision()
           #
-          # Robust detection:
-          # supports both:
+          # Supports both:
           #
           # function quotaDecision(snapshot: ..., priority: ...) {
           #
@@ -103,41 +110,72 @@ jobs:
 
           if not match:
               raise SystemExit(
-                  "ERROR: quotaDecision() signature not found in lib/line.ts"
+                  "ERROR: quotaDecision() signature not found"
               )
 
           start = match.start()
 
-          next_function = re.search(
-              r"\nfunction\s+deterministicUuid\s*\(",
-              s[match.end():],
-              re.MULTILINE
+          # =========================================================
+          # FIND REAL END OF quotaDecision()
+          #
+          # Do NOT depend on deterministicUuid() or any next function.
+          # Match braces until quotaDecision's root closing brace.
+          # =========================================================
+
+          brace_start = s.find(
+              "{",
+              match.start(),
+              match.end()
           )
 
-          if not next_function:
+          if brace_start < 0:
               raise SystemExit(
-                  "ERROR: deterministicUuid() boundary not found"
+                  "ERROR: opening brace for quotaDecision() not found"
               )
 
-          end = match.end() + next_function.start()
+          depth = 0
+          end = None
+
+          for i in range(brace_start, len(s)):
+              char = s[i]
+
+              if char == "{":
+                  depth += 1
+
+              elif char == "}":
+                  depth -= 1
+
+                  if depth == 0:
+                      end = i + 1
+                      break
+
+          if end is None:
+              raise SystemExit(
+                  "ERROR: closing brace for quotaDecision() not found"
+              )
+
+          print(
+              f"✅ quotaDecision() range located: "
+              f"{start} -> {end}"
+          )
 
           # =========================================================
-          # SYNCHRONIZED R2.2 QUOTA GUARD
+          # R2.3 PRIORITY PACING POLICY
           #
-          # Safety order:
+          # TEST:
+          #   hard monthly pace only
           #
-          # 1. quota availability
-          # 2. monthly exhaustion
-          # 3. daily cap
-          # 4. hard monthly pace
-          # 5. STRONG
-          # 6. reserve protection
-          # 7. TEST inside hard pace
-          # 8. CONFIRMED standard pace
+          # CONFIRMED:
+          #   hard pace +3 default
           #
-          # Critical:
-          # TEST must execute BEFORE
-          # confirmed-pace-budget-used.
+          # STRONG:
+          #   hard pace +5 default
+          #
+          # ALL:
+          #   protect reserve
+          #   protect monthly quota
+          #   respect daily cap when available
+          #
           # =========================================================
 
           replacement = '''function quotaDecision(
@@ -162,16 +200,24 @@ jobs:
               };
             }
 
-            const hardPacedBudget =
-              snapshot.monthlyLimit != null
-                ? Math.floor(
-                    snapshot.monthlyLimit *
-                    (
-                      snapshot.businessDaysElapsed /
-                      snapshot.businessDaysTotal
-                    )
-                  )
-                : null;
+            // -------------------------------------------------------
+            // Reserve protection
+            // Applies to ALL priorities.
+            // -------------------------------------------------------
+
+            if (
+              snapshot.survivalMode ||
+              snapshot.remaining <= snapshot.reserve
+            ) {
+              return {
+                allowed: false,
+                reason: "reserve-protected"
+              };
+            }
+
+            // -------------------------------------------------------
+            // Daily cap
+            // -------------------------------------------------------
 
             const dailyCap = integerEnv(
               "LINE_DAILY_PUSH_CAP",
@@ -180,7 +226,7 @@ jobs:
               10000
             );
 
-            const strongBurst = integerEnv(
+            const strongDailyBurst = integerEnv(
               "LINE_STRONG_DAILY_BURST",
               2,
               0,
@@ -189,7 +235,7 @@ jobs:
 
             const dailyLimit =
               priority === "strong"
-                ? dailyCap + strongBurst
+                ? dailyCap + strongDailyBurst
                 : dailyCap;
 
             if (
@@ -205,70 +251,142 @@ jobs:
               };
             }
 
+            // -------------------------------------------------------
+            // Base hard monthly pace
+            // -------------------------------------------------------
+
+            const hardPacedBudget =
+              snapshot.monthlyLimit != null
+                ? Math.floor(
+                    snapshot.monthlyLimit *
+                    (
+                      snapshot.businessDaysElapsed /
+                      snapshot.businessDaysTotal
+                    )
+                  )
+                : null;
+
+            // -------------------------------------------------------
+            // Priority burst allowances
+            // -------------------------------------------------------
+
+            const confirmedPaceBurst = integerEnv(
+              "LINE_CONFIRMED_PACE_BURST",
+              3,
+              0,
+              1000
+            );
+
+            const strongPaceBurst = integerEnv(
+              "LINE_STRONG_PACE_BURST",
+              5,
+              0,
+              1000
+            );
+
+            const paceBurst =
+              priority === "strong"
+                ? strongPaceBurst
+                : priority === "confirmed"
+                  ? confirmedPaceBurst
+                  : 0;
+
+            // -------------------------------------------------------
+            // Never allow priority burst to consume reserve.
+            // -------------------------------------------------------
+
+            const spendableLimit =
+              snapshot.monthlyLimit != null
+                ? Math.max(
+                    0,
+                    snapshot.monthlyLimit - snapshot.reserve
+                  )
+                : null;
+
+            const rawPriorityPacedBudget =
+              hardPacedBudget != null
+                ? hardPacedBudget + paceBurst
+                : null;
+
+            const priorityPacedBudget =
+              rawPriorityPacedBudget != null &&
+              spendableLimit != null
+                ? Math.min(
+                    rawPriorityPacedBudget,
+                    spendableLimit
+                  )
+                : rawPriorityPacedBudget;
+
+            // -------------------------------------------------------
+            // Priority pacing ceiling
+            // -------------------------------------------------------
+
             if (
-              hardPacedBudget != null &&
+              priorityPacedBudget != null &&
               snapshot.totalUsage != null &&
-              snapshot.totalUsage >= hardPacedBudget
+              snapshot.totalUsage >= priorityPacedBudget
             ) {
-              return {
-                allowed: false,
-                reason: "hard-monthly-pace-used"
-              };
-            }
-
-            if (priority === "strong") {
-              return {
-                allowed: true,
-                reason:
-                  snapshot.survivalMode
-                    ? "strong-within-hard-pace-reserve"
-                    : "strong-within-hard-pace"
-              };
-            }
-
-            if (
-              snapshot.survivalMode ||
-              snapshot.remaining <= snapshot.reserve
-            ) {
-              return {
-                allowed: false,
-                reason: "reserve-protected"
-              };
-            }
-
-            if (priority === "test") {
-              if (
-                snapshot.remainingPercent != null &&
-                snapshot.remainingPercent <= 25
-              ) {
+              if (priority === "strong") {
                 return {
                   allowed: false,
-                  reason: "test-reserve-protected"
+                  reason: "strong-pace-burst-used"
+                };
+              }
+
+              if (priority === "confirmed") {
+                return {
+                  allowed: false,
+                  reason: "confirmed-pace-burst-used"
                 };
               }
 
               return {
-                allowed: true,
-                reason: "test-within-hard-pace"
+                allowed: false,
+                reason: "test-hard-pace-used"
               };
             }
 
+            // -------------------------------------------------------
+            // STRONG
+            // -------------------------------------------------------
+
+            if (priority === "strong") {
+              return {
+                allowed: true,
+                reason: "strong-within-priority-pace"
+              };
+            }
+
+            // -------------------------------------------------------
+            // CONFIRMED
+            // -------------------------------------------------------
+
+            if (priority === "confirmed") {
+              return {
+                allowed: true,
+                reason: "confirmed-within-priority-pace"
+              };
+            }
+
+            // -------------------------------------------------------
+            // TEST
+            // -------------------------------------------------------
+
             if (
-              snapshot.budgetHeadroom != null &&
-              snapshot.budgetHeadroom <= 0
+              snapshot.remainingPercent != null &&
+              snapshot.remainingPercent <= 25
             ) {
               return {
                 allowed: false,
-                reason: "confirmed-pace-budget-used"
+                reason: "test-reserve-protected"
               };
             }
 
             return {
               allowed: true,
-              reason: "within-r22-paced-budget"
+              reason: "test-within-hard-pace"
             };
-          }
-          '''
+          }'''
 
           # =========================================================
           # APPLY PATCH
@@ -280,45 +398,56 @@ jobs:
           # SANITY CHECK
           # =========================================================
 
-          test_pos = s.find(
-              'reason: "test-within-hard-pace"'
+          required_tokens = [
+              'reason: "test-within-hard-pace"',
+              'reason: "confirmed-within-priority-pace"',
+              'reason: "strong-within-priority-pace"',
+              'reason: "test-hard-pace-used"',
+              'reason: "confirmed-pace-burst-used"',
+              'reason: "strong-pace-burst-used"',
+              '"LINE_CONFIRMED_PACE_BURST"',
+              '"LINE_STRONG_PACE_BURST"',
+              '"LINE_MONTHLY_RESERVE_MESSAGES"',
+              "export async function sendLineText",
+              "getLineQuotaSnapshot"
+          ]
+
+          for token in required_tokens:
+              if token not in s:
+                  raise SystemExit(
+                      f"ERROR: required token missing: {token}"
+                  )
+
+          obsolete_tokens = [
+              'reason: "confirmed-pace-budget-used"',
+              'reason: "test-budget-protected"',
+              'reason: "hard-monthly-pace-used"'
+          ]
+
+          for token in obsolete_tokens:
+              if token in s:
+                  raise SystemExit(
+                      f"ERROR: obsolete quota logic remains: {token}"
+                  )
+
+          # Ensure only one quotaDecision definition remains.
+          quota_count = len(
+              re.findall(
+                  r"function\s+quotaDecision\s*\(",
+                  s
+              )
           )
 
-          confirmed_pos = s.find(
-              'reason: "confirmed-pace-budget-used"'
-          )
-
-          if test_pos < 0:
+          if quota_count != 1:
               raise SystemExit(
-                  "ERROR: test-within-hard-pace is missing"
-              )
-
-          if confirmed_pos < 0:
-              raise SystemExit(
-                  "ERROR: confirmed-pace-budget-used is missing"
-              )
-
-          if test_pos > confirmed_pos:
-              raise SystemExit(
-                  "ERROR: TEST guard is after confirmed pace guard"
-              )
-
-          if 'reason: "test-budget-protected"' in s:
-              raise SystemExit(
-                  "ERROR: obsolete test-budget-protected logic still exists"
-              )
-
-          if "export async function sendLineText" not in s:
-              raise SystemExit(
-                  "ERROR: sendLineText() disappeared after patch"
-              )
-
-          if "getLineQuotaSnapshot" not in s:
-              raise SystemExit(
-                  "ERROR: getLineQuotaSnapshot() disappeared after patch"
+                  f"ERROR: expected 1 quotaDecision(), found {quota_count}"
               )
 
           p.write_text(s)
+
+          print("✅ quotaDecision() replaced")
+          print("✅ Old quota guard removed")
+          print("✅ R2.3 priority pacing installed")
 
           # =========================================================
           # .env.example
@@ -327,42 +456,84 @@ jobs:
           env = Path(".env.example")
           e = env.read_text() if env.exists() else ""
 
-          if "LINE_MONTHLY_RESERVE_MESSAGES=" in e:
-              e = re.sub(
-                  r"LINE_MONTHLY_RESERVE_MESSAGES=\d+",
-                  "LINE_MONTHLY_RESERVE_MESSAGES=45",
-                  e
-              )
-          else:
-              if e and not e.endswith("\n"):
-                  e += "\n"
-              e += "LINE_MONTHLY_RESERVE_MESSAGES=45\n"
+          def set_env(text, key, value):
+              pattern = rf"^{re.escape(key)}=.*$"
 
-          if "LINE_DAILY_PUSH_CAP=" not in e:
-              e += "LINE_DAILY_PUSH_CAP=12\n"
+              if re.search(
+                  pattern,
+                  text,
+                  re.MULTILINE
+              ):
+                  return re.sub(
+                      pattern,
+                      f"{key}={value}",
+                      text,
+                      flags=re.MULTILINE
+                  )
 
-          if "LINE_STRONG_DAILY_BURST=" not in e:
-              e += "LINE_STRONG_DAILY_BURST=2\n"
+              if text and not text.endswith("\n"):
+                  text += "\n"
+
+              return text + f"{key}={value}\n"
+
+          e = set_env(
+              e,
+              "LINE_MONTHLY_RESERVE_MESSAGES",
+              "45"
+          )
+
+          e = set_env(
+              e,
+              "LINE_DAILY_PUSH_CAP",
+              "12"
+          )
+
+          e = set_env(
+              e,
+              "LINE_STRONG_DAILY_BURST",
+              "2"
+          )
+
+          e = set_env(
+              e,
+              "LINE_CONFIRMED_PACE_BURST",
+              "3"
+          )
+
+          e = set_env(
+              e,
+              "LINE_STRONG_PACE_BURST",
+              "5"
+          )
 
           env.write_text(e)
+
+          print("✅ .env.example synchronized")
 
           # =========================================================
           # HEALTH VERSION
           # =========================================================
 
-          health = Path("app/api/health/route.js")
+          health = Path(
+              "app/api/health/route.js"
+          )
 
           if health.exists():
               h = health.read_text()
 
               h = h.replace(
                   'version: "R2.1-SMART-QUOTA-1"',
-                  'version: "R2.2-QUOTA-SURVIVAL-2"'
+                  'version: "R2.3-PRIORITY-PACE-1"'
               )
 
               h = h.replace(
                   'version: "R2.2-QUOTA-SURVIVAL-1"',
-                  'version: "R2.2-QUOTA-SURVIVAL-2"'
+                  'version: "R2.3-PRIORITY-PACE-1"'
+              )
+
+              h = h.replace(
+                  'version: "R2.2-QUOTA-SURVIVAL-2"',
+                  'version: "R2.3-PRIORITY-PACE-1"'
               )
 
               h = h.replace(
@@ -372,17 +543,18 @@ jobs:
 
               health.write_text(h)
 
-          print("✅ quotaDecision() located")
-          print("✅ R2.2 quota guard synchronized")
-          print("✅ TEST executes before CONFIRMED pace guard")
-          print("✅ TEST allowed only inside hard pace")
-          print("✅ Reserve protection preserved")
-          print("✅ Daily cap preserved")
-          print("✅ Hard monthly pace preserved")
-          print("✅ sendLineText() preserved")
+              print("✅ Health version updated")
+
+          print("========================================")
+          print("✅ R2.3 PATCH COMPLETE")
+          print("✅ TEST hard pace: +0")
+          print("✅ CONFIRMED burst: +3")
+          print("✅ STRONG burst: +5")
+          print("✅ Reserve: 45")
+          print("========================================")
           PY
 
-      - name: Verify patched source structure
+      - name: Verify patched source
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -394,7 +566,31 @@ jobs:
             lib/line.ts
 
           grep -q \
-            'confirmed-pace-budget-used' \
+            'confirmed-within-priority-pace' \
+            lib/line.ts
+
+          grep -q \
+            'strong-within-priority-pace' \
+            lib/line.ts
+
+          grep -q \
+            'test-hard-pace-used' \
+            lib/line.ts
+
+          grep -q \
+            'confirmed-pace-burst-used' \
+            lib/line.ts
+
+          grep -q \
+            'strong-pace-burst-used' \
+            lib/line.ts
+
+          grep -q \
+            'LINE_CONFIRMED_PACE_BURST' \
+            lib/line.ts
+
+          grep -q \
+            'LINE_STRONG_PACE_BURST' \
             lib/line.ts
 
           grep -q \
@@ -406,10 +602,26 @@ jobs:
             lib/line.ts
 
           if grep -q \
+            'confirmed-pace-budget-used' \
+            lib/line.ts
+          then
+            echo "ERROR: old confirmed pace logic detected"
+            exit 1
+          fi
+
+          if grep -q \
             'test-budget-protected' \
             lib/line.ts
           then
-            echo "ERROR: obsolete test-budget-protected logic detected"
+            echo "ERROR: old TEST budget logic detected"
+            exit 1
+          fi
+
+          if grep -q \
+            'hard-monthly-pace-used' \
+            lib/line.ts
+          then
+            echo "ERROR: old hard pace logic detected"
             exit 1
           fi
 
@@ -451,48 +663,63 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
         run: npm run build
 
-      - name: Verify final quota guard
+      - name: Verify final R2.3 policy
         shell: bash
         run: |
           set -Eeuo pipefail
 
           python3 <<'PY'
           from pathlib import Path
+          import re
 
           s = Path("lib/line.ts").read_text()
 
-          test_pos = s.find(
-              'reason: "test-within-hard-pace"'
+          required = [
+              "test-within-hard-pace",
+              "confirmed-within-priority-pace",
+              "strong-within-priority-pace",
+              "test-hard-pace-used",
+              "confirmed-pace-burst-used",
+              "strong-pace-burst-used",
+              "LINE_CONFIRMED_PACE_BURST",
+              "LINE_STRONG_PACE_BURST",
+              "LINE_MONTHLY_RESERVE_MESSAGES"
+          ]
+
+          for token in required:
+              if token not in s:
+                  raise SystemExit(
+                      f"ERROR: missing final token: {token}"
+                  )
+
+          forbidden = [
+              "confirmed-pace-budget-used",
+              "test-budget-protected",
+              "hard-monthly-pace-used"
+          ]
+
+          for token in forbidden:
+              if token in s:
+                  raise SystemExit(
+                      f"ERROR: obsolete logic detected: {token}"
+                  )
+
+          count = len(
+              re.findall(
+                  r"function\s+quotaDecision\s*\(",
+                  s
+              )
           )
 
-          confirmed_pos = s.find(
-              'reason: "confirmed-pace-budget-used"'
-          )
-
-          if test_pos < 0:
+          if count != 1:
               raise SystemExit(
-                  "ERROR: TEST guard missing"
+                  f"ERROR: quotaDecision count = {count}"
               )
 
-          if confirmed_pos < 0:
-              raise SystemExit(
-                  "ERROR: CONFIRMED guard missing"
-              )
-
-          if test_pos > confirmed_pos:
-              raise SystemExit(
-                  "ERROR: TEST guard order is incorrect"
-              )
-
-          if 'reason: "test-budget-protected"' in s:
-              raise SystemExit(
-                  "ERROR: obsolete TEST guard returned"
-              )
-
-          print("✅ Final quota guard verified")
+          print("✅ Final R2.3 policy verified")
           PY
 
-      - name: Commit and push R2.2
+      - name: Commit and push R2.3
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -516,13 +743,13 @@ jobs:
           git diff --cached --check
 
           if git diff --cached --quiet; then
-            echo "✅ R2.2 is already synchronized."
-            echo "No changes to push."
+            echo "✅ R2.3 is already synchronized."
+            echo "No runtime changes to push."
             exit 0
           fi
 
           git commit \
-            -m "Install synchronized R2.2 LINE quota guard"
+            -m "Install R2.3 LINE priority quota pacing"
 
           git push \
             origin \
@@ -530,14 +757,14 @@ jobs:
 
       - name: Done
         run: |
-          echo "========================================="
-          echo "✅ R2.2 Auto Installer completed"
+          echo "============================================"
+          echo "✅ R2.3 LINE PRIORITY PACING INSTALLED"
+          echo "✅ TEST: hard pace only"
+          echo "✅ CONFIRMED: hard pace +3"
+          echo "✅ STRONG: hard pace +5"
           echo "✅ Monthly reserve: 45"
-          echo "✅ Daily cap: 12"
-          echo "✅ STRONG burst: +2"
-          echo "✅ TEST works inside hard pace"
-          echo "✅ TEST cannot consume reserve"
-          echo "✅ CONFIRMED remains standard-paced"
-          echo "✅ STRONG cannot bypass hard monthly pace"
-          echo "✅ Runtime and installer logic synchronized"
-          echo "========================================="
+          echo "✅ Daily base cap: 12"
+          echo "✅ STRONG daily burst: +2"
+          echo "✅ Reserve protected for all priorities"
+          echo "✅ quotaDecision boundary is brace-based"
+          echo "============================================"
