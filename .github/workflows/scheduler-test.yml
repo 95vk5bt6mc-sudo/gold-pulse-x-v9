@@ -1,12 +1,6 @@
 name: Scheduler Smoke Test
 
 on:
-  schedule:
-    # CLEAN SCHEDULER REGISTRATION TEST
-    # GitHub Actions cron uses UTC.
-    # Runs at minute 07,17,27,37,47,57 every hour.
-    - cron: "7,17,27,37,47,57 * * * *"
-
   workflow_dispatch:
 
 permissions:
@@ -22,7 +16,7 @@ jobs:
     timeout-minutes: 2
 
     steps:
-      - name: Confirm scheduler execution
+      - name: Confirm manual workflow execution
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -39,12 +33,5 @@ jobs:
           echo "Run Number: ${{ github.run_number }}"
           echo "========================================"
 
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "✅ TRUE SCHEDULED RUN"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "ℹ️ MANUAL TEST RUN"
-          else
-            echo "⚠️ Unexpected event: ${{ github.event_name }}"
-          fi
-
-          echo "✅ Scheduler smoke test completed"
+          echo "ℹ️ Automatic scheduling is handled by Cloudflare Cron."
+          echo "✅ Manual GitHub Actions test completed"
