@@ -9,14 +9,18 @@ export interface LineQuotaSnapshot {
   totalUsage: number | null;
   remaining: number | null;
   reserve: number;
+
   businessDaysTotal: number;
   businessDaysElapsed: number;
   businessDaysLeft: number;
+
   cumulativeBudget: number | null;
   budgetHeadroom: number | null;
+
   dailyUsed: number | null;
   remainingPercent: number | null;
   survivalMode: boolean;
+
   sourceStatus: {
     quota: number | null;
     consumption: number | null;
@@ -28,15 +32,23 @@ export interface LineSendResult {
   ok: boolean;
   delivered: boolean;
   duplicate: boolean;
+
   mode: "push" | "broadcast" | "disabled";
   status: number;
+
   retryKey?: string;
   requestId?: string | null;
   acceptedRequestId?: string | null;
+
   detail?: string;
   guardReason?: string;
+
   quota?: LineQuotaSnapshot;
 }
+
+/* =========================================================
+ * ENV HELPERS
+ * ========================================================= */
 
 function integerEnv(
   name: string,
@@ -45,9 +57,20 @@ function integerEnv(
   max: number
 ): number {
   const raw = Number(process.env[name]);
-  if (!Number.isFinite(raw)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(raw)));
+
+  if (!Number.isFinite(raw)) {
+    return fallback;
+  }
+
+  return Math.max(
+    min,
+    Math.min(max, Math.round(raw))
+  );
 }
+
+/* =========================================================
+ * BANGKOK DATE
+ * ========================================================= */
 
 function bangkokDateParts(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -58,33 +81,55 @@ function bangkokDateParts(now = new Date()) {
   }).formatToParts(now);
 
   const map = Object.fromEntries(
-    parts.map((part) => [part.type, part.value])
+    parts.map((part) => [
+      part.type,
+      part.value
+    ])
   );
 
   return {
     year: Number(map.year),
     month: Number(map.month),
     day: Number(map.day),
-    ymd: `${map.year}${map.month}${map.day}`
+
+    ymd:
+      `${map.year}${map.month}${map.day}`
   };
 }
+
+/* =========================================================
+ * BUSINESS DAYS — MONDAY TO FRIDAY
+ * ========================================================= */
 
 function businessDayProgress(
   year: number,
   month: number,
   day: number
 ) {
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const lastDay = new Date(
+    Date.UTC(year, month, 0)
+  ).getUTCDate();
 
   let total = 0;
   let elapsed = 0;
 
-  for (let current = 1; current <= lastDay; current += 1) {
+  for (
+    let current = 1;
+    current <= lastDay;
+    current += 1
+  ) {
     const weekday = new Date(
-      Date.UTC(year, month - 1, current)
+      Date.UTC(
+        year,
+        month - 1,
+        current
+      )
     ).getUTCDay();
 
-    if (weekday >= 1 && weekday <= 5) {
+    if (
+      weekday >= 1 &&
+      weekday <= 5
+    ) {
       total += 1;
 
       if (current <= day) {
@@ -95,26 +140,56 @@ function businessDayProgress(
 
   return {
     total: Math.max(1, total),
+
     elapsed,
-    left: Math.max(1, total - elapsed + 1)
+
+    /*
+     * Includes current business day.
+     */
+    left: Math.max(
+      1,
+      total - elapsed + 1
+    )
   };
 }
 
-async function getJson(url: string, token: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
+/* =========================================================
+ * SAFE LINE API GET
+ * ========================================================= */
+
+async function getJson(
+  url: string,
+  token: string
+) {
+  const controller =
+    new AbortController();
+
+  const timeout = setTimeout(
+    () => controller.abort(),
+    8_000
+  );
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      cache: "no-store",
-      signal: controller.signal
-    });
+    const response = await fetch(
+      url,
+      {
+        method: "GET",
 
-    const body = await response.json().catch(() => ({}));
+        headers: {
+          Authorization:
+            `Bearer ${token}`
+        },
+
+        cache: "no-store",
+
+        signal:
+          controller.signal
+      }
+    );
+
+    const body = await response
+      .json()
+      .catch(() => ({}));
 
     return {
       status: response.status,
@@ -132,37 +207,70 @@ async function getJson(url: string, token: string) {
   }
 }
 
+/* =========================================================
+ * LINE QUOTA SNAPSHOT
+ * ========================================================= */
+
 export async function getLineQuotaSnapshot(
-  mode: "push" | "broadcast" | "disabled" = "push"
+  mode:
+    | "push"
+    | "broadcast"
+    | "disabled" = "push"
 ): Promise<LineQuotaSnapshot> {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const token =
+    process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
-  const reserve = integerEnv("LINE_MONTHLY_RESERVE_MESSAGES", 45, 0, 10000);
-
-  const date = bangkokDateParts();
-
-  const businessDays = businessDayProgress(
-    date.year,
-    date.month,
-    date.day
+  /*
+   * Keep 45 messages untouched as monthly emergency reserve.
+   */
+  const reserve = integerEnv(
+    "LINE_MONTHLY_RESERVE_MESSAGES",
+    45,
+    0,
+    10000
   );
 
-  if (!token || mode === "disabled") {
+  const date =
+    bangkokDateParts();
+
+  const businessDays =
+    businessDayProgress(
+      date.year,
+      date.month,
+      date.day
+    );
+
+  if (
+    !token ||
+    mode === "disabled"
+  ) {
     return {
       checked: false,
       limited: false,
+
       monthlyLimit: null,
       totalUsage: null,
       remaining: null,
+
       reserve,
-      businessDaysTotal: businessDays.total,
-      businessDaysElapsed: businessDays.elapsed,
-      businessDaysLeft: businessDays.left,
+
+      businessDaysTotal:
+        businessDays.total,
+
+      businessDaysElapsed:
+        businessDays.elapsed,
+
+      businessDaysLeft:
+        businessDays.left,
+
       cumulativeBudget: null,
       budgetHeadroom: null,
+
       dailyUsed: null,
       remainingPercent: null,
+
       survivalMode: false,
+
       sourceStatus: {
         quota: null,
         consumption: null,
@@ -185,10 +293,12 @@ export async function getLineQuotaSnapshot(
       "https://api.line.me/v2/bot/message/quota",
       token
     ),
+
     getJson(
       "https://api.line.me/v2/bot/message/quota/consumption",
       token
     ),
+
     getJson(
       dailyEndpoint,
       token
@@ -197,31 +307,47 @@ export async function getLineQuotaSnapshot(
 
   const limited =
     quotaResponse.ok &&
-    quotaResponse.body?.type === "limited";
+    quotaResponse.body?.type ===
+      "limited";
 
   const monthlyLimit =
     limited &&
     Number.isFinite(
-      Number(quotaResponse.body?.value)
+      Number(
+        quotaResponse.body?.value
+      )
     )
-      ? Number(quotaResponse.body.value)
+      ? Number(
+          quotaResponse.body.value
+        )
       : null;
 
   const totalUsage =
     consumptionResponse.ok &&
     Number.isFinite(
-      Number(consumptionResponse.body?.totalUsage)
+      Number(
+        consumptionResponse.body
+          ?.totalUsage
+      )
     )
-      ? Number(consumptionResponse.body.totalUsage)
+      ? Number(
+          consumptionResponse.body
+            .totalUsage
+        )
       : null;
 
   const dailyUsed =
     dailyResponse.ok &&
-    dailyResponse.body?.status === "ready" &&
+    dailyResponse.body?.status ===
+      "ready" &&
     Number.isFinite(
-      Number(dailyResponse.body?.success)
+      Number(
+        dailyResponse.body?.success
+      )
     )
-      ? Number(dailyResponse.body.success)
+      ? Number(
+          dailyResponse.body.success
+        )
       : null;
 
   const remaining =
@@ -229,16 +355,29 @@ export async function getLineQuotaSnapshot(
     totalUsage != null
       ? Math.max(
           0,
-          monthlyLimit - totalUsage
+          monthlyLimit -
+            totalUsage
         )
       : null;
+
+  /*
+   * =======================================================
+   * REPORTING PACE
+   * =======================================================
+   *
+   * cumulativeBudget / budgetHeadroom are kept for UI,
+   * reporting and monitoring.
+   *
+   * R2.4 DOES NOT use these as universal hard blockers.
+   */
 
   const standardPool =
     monthlyLimit == null
       ? null
       : Math.max(
           0,
-          monthlyLimit - reserve
+          monthlyLimit -
+            reserve
         );
 
   const cumulativeBudget =
@@ -257,7 +396,8 @@ export async function getLineQuotaSnapshot(
     totalUsage != null
       ? Math.max(
           0,
-          cumulativeBudget - totalUsage
+          cumulativeBudget -
+            totalUsage
         )
       : null;
 
@@ -266,7 +406,10 @@ export async function getLineQuotaSnapshot(
     monthlyLimit != null &&
     monthlyLimit > 0
       ? Math.round(
-          (remaining / monthlyLimit) *
+          (
+            remaining /
+            monthlyLimit
+          ) *
             1000
         ) / 10
       : null;
@@ -285,37 +428,90 @@ export async function getLineQuotaSnapshot(
     checked:
       quotaResponse.ok &&
       consumptionResponse.ok,
+
     limited,
+
     monthlyLimit,
     totalUsage,
     remaining,
+
     reserve,
+
     businessDaysTotal:
       businessDays.total,
+
     businessDaysElapsed:
       businessDays.elapsed,
+
     businessDaysLeft:
       businessDays.left,
+
     cumulativeBudget,
     budgetHeadroom,
+
     dailyUsed,
     remainingPercent,
     survivalMode,
+
     sourceStatus: {
       quota:
         quotaResponse.status,
+
       consumption:
         consumptionResponse.status,
+
       daily:
         dailyResponse.status
     }
   };
 }
 
+/* =========================================================
+ * R2.4 BUSINESS-DAY CAPACITY GUARD
+ * =========================================================
+ *
+ * KEY CHANGE:
+ *
+ * NO MORE:
+ *
+ * - hard-monthly-pace-used
+ * - confirmed-pace-budget-used
+ * - confirmed-pace-burst-used
+ * - strong-pace-burst-used
+ * - test-hard-pace-used
+ *
+ * Linear monthly pacing is REPORTING ONLY.
+ *
+ * Priority policy:
+ *
+ * STRONG
+ *   → highest priority
+ *   → may use spendable monthly capacity
+ *   → cannot consume emergency reserve
+ *
+ * CONFIRMED
+ *   → protects at least 2 messages for every future
+ *     business day by default
+ *
+ * TEST
+ *   → intentionally stricter
+ *   → protects 5 messages for every future business day
+ *   → disabled when monthly quota <=25%
+ *
+ * Daily cap applies whenever LINE returns dailyUsed.
+ * ========================================================= */
+
 function quotaDecision(
   snapshot: LineQuotaSnapshot,
   priority: LinePriority
 ) {
+  /*
+   * If LINE quota API temporarily cannot be read,
+   * do not kill real alerts automatically.
+   *
+   * LINE's actual send endpoint remains the final authority.
+   */
+
   if (
     !snapshot.checked ||
     !snapshot.limited ||
@@ -323,35 +519,46 @@ function quotaDecision(
   ) {
     return {
       allowed: true,
-      reason: "quota-unlimited-or-unavailable"
+      reason:
+        "quota-unlimited-or-unavailable"
     };
   }
 
-  if (snapshot.remaining <= 0) {
-    return {
-      allowed: false,
-      reason: "monthly-quota-exhausted"
-    };
-  }
-
-  // -------------------------------------------------------
-  // Reserve protection
-  // Applies to ALL priorities.
-  // -------------------------------------------------------
+  /* -------------------------------------------------------
+   * ABSOLUTE MONTHLY LIMIT
+   * ------------------------------------------------------- */
 
   if (
-    snapshot.survivalMode ||
-    snapshot.remaining <= snapshot.reserve
+    snapshot.remaining <= 0
   ) {
     return {
       allowed: false,
-      reason: "reserve-protected"
+      reason:
+        "monthly-quota-exhausted"
     };
   }
 
-  // -------------------------------------------------------
-  // Daily cap
-  // -------------------------------------------------------
+  /* -------------------------------------------------------
+   * EMERGENCY MONTHLY RESERVE
+   *
+   * Applies to ALL priorities.
+   * ------------------------------------------------------- */
+
+  if (
+    snapshot.survivalMode ||
+    snapshot.remaining <=
+      snapshot.reserve
+  ) {
+    return {
+      allowed: false,
+      reason:
+        "monthly-reserve-protected"
+    };
+  }
+
+  /* -------------------------------------------------------
+   * DAILY CAP
+   * ------------------------------------------------------- */
 
   const dailyCap = integerEnv(
     "LINE_DAILY_PUSH_CAP",
@@ -360,24 +567,32 @@ function quotaDecision(
     10000
   );
 
-  const strongDailyBurst = integerEnv(
-    "LINE_STRONG_DAILY_BURST",
-    2,
-    0,
-    1000
-  );
+  const strongDailyBurst =
+    integerEnv(
+      "LINE_STRONG_DAILY_BURST",
+      2,
+      0,
+      1000
+    );
 
   const dailyLimit =
     priority === "strong"
-      ? dailyCap + strongDailyBurst
+      ? dailyCap +
+        strongDailyBurst
       : dailyCap;
+
+  /*
+   * Only enforce if LINE returned a usable daily value.
+   */
 
   if (
     snapshot.dailyUsed != null &&
-    snapshot.dailyUsed >= dailyLimit
+    snapshot.dailyUsed >=
+      dailyLimit
   ) {
     return {
       allowed: false,
+
       reason:
         priority === "strong"
           ? "strong-daily-cap-used"
@@ -385,126 +600,104 @@ function quotaDecision(
     };
   }
 
-  // -------------------------------------------------------
-  // Base hard monthly pace
-  // -------------------------------------------------------
+  /* -------------------------------------------------------
+   * SPENDABLE MONTHLY CAPACITY
+   * ------------------------------------------------------- */
 
-  const hardPacedBudget =
-    snapshot.monthlyLimit != null
-      ? Math.floor(
-          snapshot.monthlyLimit *
-          (
-            snapshot.businessDaysElapsed /
-            snapshot.businessDaysTotal
-          )
-        )
-      : null;
+  const spendableRemaining =
+    Math.max(
+      0,
+      snapshot.remaining -
+        snapshot.reserve
+    );
 
-  // -------------------------------------------------------
-  // Priority burst allowances
-  // -------------------------------------------------------
+  /*
+   * businessDaysLeft includes today.
+   *
+   * We protect capacity for days AFTER today.
+   */
 
-  const confirmedPaceBurst = integerEnv(
-    "LINE_CONFIRMED_PACE_BURST",
-    3,
-    0,
-    1000
-  );
+  const futureBusinessDays =
+    Math.max(
+      0,
+      snapshot.businessDaysLeft -
+        1
+    );
 
-  const strongPaceBurst = integerEnv(
-    "LINE_STRONG_PACE_BURST",
-    5,
-    0,
-    1000
-  );
-
-  const paceBurst =
-    priority === "strong"
-      ? strongPaceBurst
-      : priority === "confirmed"
-        ? confirmedPaceBurst
-        : 0;
-
-  // -------------------------------------------------------
-  // Never allow priority burst to consume reserve.
-  // -------------------------------------------------------
-
-  const spendableLimit =
-    snapshot.monthlyLimit != null
-      ? Math.max(
-          0,
-          snapshot.monthlyLimit - snapshot.reserve
-        )
-      : null;
-
-  const rawPriorityPacedBudget =
-    hardPacedBudget != null
-      ? hardPacedBudget + paceBurst
-      : null;
-
-  const priorityPacedBudget =
-    rawPriorityPacedBudget != null &&
-    spendableLimit != null
-      ? Math.min(
-          rawPriorityPacedBudget,
-          spendableLimit
-        )
-      : rawPriorityPacedBudget;
-
-  // -------------------------------------------------------
-  // Priority pacing ceiling
-  // -------------------------------------------------------
+  /* =======================================================
+   * STRONG
+   * ======================================================= */
 
   if (
-    priorityPacedBudget != null &&
-    snapshot.totalUsage != null &&
-    snapshot.totalUsage >= priorityPacedBudget
+    priority === "strong"
   ) {
-    if (priority === "strong") {
+    /*
+     * STRONG ignores linear monthly pacing.
+     *
+     * Emergency reserve and daily cap above still apply.
+     */
+
+    return {
+      allowed: true,
+      reason:
+        "strong-capacity-safe"
+    };
+  }
+
+  /* =======================================================
+   * CONFIRMED
+   * ======================================================= */
+
+  if (
+    priority === "confirmed"
+  ) {
+    /*
+     * Keep a minimum amount for every future business day.
+     *
+     * Default:
+     *
+     * 2 messages × future business days.
+     */
+
+    const futureReservePerDay =
+      integerEnv(
+        "LINE_CONFIRMED_FUTURE_RESERVE_PER_DAY",
+        2,
+        0,
+        100
+      );
+
+    const futureProtection =
+      futureBusinessDays *
+      futureReservePerDay;
+
+    if (
+      spendableRemaining <=
+        futureProtection
+    ) {
       return {
         allowed: false,
-        reason: "strong-pace-burst-used"
+
+        reason:
+          "confirmed-future-capacity-protected"
       };
     }
 
-    if (priority === "confirmed") {
-      return {
-        allowed: false,
-        reason: "confirmed-pace-burst-used"
-      };
-    }
-
-    return {
-      allowed: false,
-      reason: "test-hard-pace-used"
-    };
-  }
-
-  // -------------------------------------------------------
-  // STRONG
-  // -------------------------------------------------------
-
-  if (priority === "strong") {
     return {
       allowed: true,
-      reason: "strong-within-priority-pace"
+      reason:
+        "confirmed-capacity-safe"
     };
   }
 
-  // -------------------------------------------------------
-  // CONFIRMED
-  // -------------------------------------------------------
+  /* =======================================================
+   * TEST
+   * ======================================================= */
 
-  if (priority === "confirmed") {
-    return {
-      allowed: true,
-      reason: "confirmed-within-priority-pace"
-    };
-  }
-
-  // -------------------------------------------------------
-  // TEST
-  // -------------------------------------------------------
+  /*
+   * Tests are not important enough to consume quota
+   * when the month is getting tight.
+   */
 
   if (
     snapshot.remainingPercent != null &&
@@ -512,15 +705,53 @@ function quotaDecision(
   ) {
     return {
       allowed: false,
-      reason: "test-reserve-protected"
+      reason:
+        "test-low-quota-protected"
+    };
+  }
+
+  /*
+   * Tests protect substantially more future capacity.
+   *
+   * Default:
+   *
+   * 5 messages × future business days.
+   */
+
+  const testFutureReservePerDay =
+    integerEnv(
+      "LINE_TEST_FUTURE_RESERVE_PER_DAY",
+      5,
+      0,
+      100
+    );
+
+  const testFutureProtection =
+    futureBusinessDays *
+    testFutureReservePerDay;
+
+  if (
+    spendableRemaining <=
+      testFutureProtection
+  ) {
+    return {
+      allowed: false,
+
+      reason:
+        "test-future-capacity-protected"
     };
   }
 
   return {
     allowed: true,
-    reason: "test-within-hard-pace"
+    reason:
+      "test-capacity-safe"
   };
 }
+
+/* =========================================================
+ * DETERMINISTIC RETRY UUID
+ * ========================================================= */
 
 function deterministicUuid(
   seed: string
@@ -532,16 +763,28 @@ function deterministicUuid(
     .subarray(0, 16);
 
   bytes[6] =
-    (bytes[6] & 0x0f) | 0x50;
+    (bytes[6] & 0x0f) |
+    0x50;
 
   bytes[8] =
-    (bytes[8] & 0x3f) | 0x80;
+    (bytes[8] & 0x3f) |
+    0x80;
 
   const hex =
     bytes.toString("hex");
 
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return (
+    `${hex.slice(0, 8)}-` +
+    `${hex.slice(8, 12)}-` +
+    `${hex.slice(12, 16)}-` +
+    `${hex.slice(16, 20)}-` +
+    `${hex.slice(20)}`
+  );
 }
+
+/* =========================================================
+ * LINE POST
+ * ========================================================= */
 
 async function postOnce(
   url: string,
@@ -554,32 +797,46 @@ async function postOnce(
 
   const timeout =
     setTimeout(
-      () => controller.abort(),
+      () =>
+        controller.abort(),
       12_000
     );
 
   try {
-    return await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization:
-          `Bearer ${token}`,
-        "Content-Type":
-          "application/json",
-        "X-Line-Retry-Key":
-          retryKey
-      },
-      body:
-        JSON.stringify(body),
-      signal:
-        controller.signal,
-      cache:
-        "no-store"
-    });
+    return await fetch(
+      url,
+      {
+        method: "POST",
+
+        headers: {
+          Authorization:
+            `Bearer ${token}`,
+
+          "Content-Type":
+            "application/json",
+
+          "X-Line-Retry-Key":
+            retryKey
+        },
+
+        body:
+          JSON.stringify(body),
+
+        signal:
+          controller.signal,
+
+        cache:
+          "no-store"
+      }
+    );
   } finally {
     clearTimeout(timeout);
   }
 }
+
+/* =========================================================
+ * MONTHLY LIMIT DETECTION
+ * ========================================================= */
 
 function isMonthlyLimit(
   status: number,
@@ -593,18 +850,24 @@ function isMonthlyLimit(
   );
 }
 
+/* =========================================================
+ * SEND LINE TEXT
+ * ========================================================= */
+
 export async function sendLineText(
   text: string,
   retrySeed?: string,
   options: {
-    priority?: LinePriority
+    priority?: LinePriority;
   } = {}
 ): Promise<LineSendResult> {
   const token =
-    process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    process.env
+      .LINE_CHANNEL_ACCESS_TOKEN;
 
   const target =
-    process.env.LINE_TARGET_ID;
+    process.env
+      .LINE_TARGET_ID;
 
   const enabled =
     ![
@@ -614,18 +877,25 @@ export async function sendLineText(
       "no"
     ].includes(
       String(
-        process.env.LINE_ALERTS_ENABLED ||
+        process.env
+          .LINE_ALERTS_ENABLED ||
           "true"
       ).toLowerCase()
     );
 
-  if (!enabled || !token) {
+  if (
+    !enabled ||
+    !token
+  ) {
     return {
       ok: false,
       delivered: false,
       duplicate: false,
+
       mode: "disabled",
+
       status: 503,
+
       detail:
         "LINE is not configured or disabled"
     };
@@ -633,7 +903,9 @@ export async function sendLineText(
 
   const retryKey =
     retrySeed
-      ? deterministicUuid(retrySeed)
+      ? deterministicUuid(
+          retrySeed
+        )
       : crypto.randomUUID();
 
   const mode =
@@ -661,13 +933,19 @@ export async function sendLineText(
       ok: false,
       delivered: false,
       duplicate: false,
+
       mode,
+
       status: 429,
+
       retryKey,
+
       detail:
         `LINE quota guard blocked: ${guard.reason}`,
+
       guardReason:
         guard.reason,
+
       quota
     };
   }
@@ -681,12 +959,14 @@ export async function sendLineText(
     target
       ? {
           to: target,
+
           messages: [
             {
               type: "text",
               text
             }
           ],
+
           notificationDisabled:
             false
         }
@@ -697,6 +977,7 @@ export async function sendLineText(
               text
             }
           ],
+
           notificationDisabled:
             false
         };
@@ -729,25 +1010,36 @@ export async function sendLineText(
       ) {
         return {
           ok: true,
+
           delivered:
             response.ok,
+
           duplicate,
+
           mode,
+
           status:
             response.status,
+
           retryKey,
+
           requestId:
             response.headers.get(
               "x-line-request-id"
             ),
+
           acceptedRequestId:
             response.headers.get(
               "x-line-accepted-request-id"
             ),
+
           detail:
-            detail || undefined,
+            detail ||
+            undefined,
+
           guardReason:
             guard.reason,
+
           quota
         };
       }
@@ -755,6 +1047,10 @@ export async function sendLineText(
       lastError =
         detail ||
         `LINE HTTP ${response.status}`;
+
+      /*
+       * Actual LINE monthly limit.
+       */
 
       if (
         isMonthlyLimit(
@@ -771,17 +1067,27 @@ export async function sendLineText(
           ok: false,
           delivered: false,
           duplicate: false,
+
           mode,
+
           status: 429,
+
           retryKey,
+
           detail:
             lastError,
+
           guardReason:
             "monthly-limit-or-reservation",
+
           quota:
             refreshedQuota
         };
       }
+
+      /*
+       * Permanent non-server error.
+       */
 
       if (
         response.status < 500 &&
@@ -791,14 +1097,20 @@ export async function sendLineText(
           ok: false,
           delivered: false,
           duplicate: false,
+
           mode,
+
           status:
             response.status,
+
           retryKey,
+
           detail:
             lastError,
+
           guardReason:
             guard.reason,
+
           quota
         };
       }
@@ -809,11 +1121,16 @@ export async function sendLineText(
           : "LINE request failed";
     }
 
+    /*
+     * Short retry backoff.
+     */
+
     await new Promise(
       (resolve) =>
         setTimeout(
           resolve,
-          500 * (attempt + 1)
+          500 *
+            (attempt + 1)
         )
     );
   }
@@ -822,13 +1139,19 @@ export async function sendLineText(
     ok: false,
     delivered: false,
     duplicate: false,
+
     mode,
+
     status: 502,
+
     retryKey,
+
     detail:
       lastError,
+
     guardReason:
       guard.reason,
+
     quota
   };
 }
