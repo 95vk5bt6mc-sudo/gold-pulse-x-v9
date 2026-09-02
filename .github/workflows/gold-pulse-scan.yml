@@ -1,12 +1,8 @@
 name: GOLD PULSE Server Scan
 
 on:
-  schedule:
-    # TEMPORARY SCHEDULER TEST
-    # GitHub Action cron uses UTC.
-    # Run at minute 03,08,13,18...58 every hour.
-    - cron: "3-58/5 * * * *"
-
+  # Manual scan only.
+  # Automatic scheduling is handled by Cloudflare Cron.
   workflow_dispatch:
 
 permissions:
@@ -41,7 +37,7 @@ jobs:
 
           echo "✅ Required secrets are configured"
 
-      - name: Scan XAU/USD and evaluate LINE alert
+      - name: Manual XAU/USD scan and LINE evaluation
         env:
           GOLD_PULSE_URL: ${{ secrets.GOLD_PULSE_URL }}
           GOLD_PULSE_API_SECRET: ${{ secrets.GOLD_PULSE_API_SECRET }}
@@ -50,11 +46,19 @@ jobs:
 
           BASE="${GOLD_PULSE_URL%/}"
 
-          echo "▶ GOLD PULSE scheduled scan"
+          echo "========================================"
+          echo "GOLD PULSE MANUAL SERVER SCAN"
+          echo "========================================"
           echo "UTC time: $(date -u '+%Y-%m-%d %H:%M:%S')"
           echo "Endpoint: $BASE/api/scan"
 
           RESPONSE_FILE="$(mktemp)"
+
+          cleanup() {
+            rm -f "$RESPONSE_FILE"
+          }
+
+          trap cleanup EXIT
 
           HTTP_STATUS="$(
             curl \
@@ -68,6 +72,8 @@ jobs:
               --max-time 55 \
               --output "$RESPONSE_FILE" \
               --write-out "%{http_code}" \
+              -H "Accept: application/json" \
+              -H "Cache-Control: no-cache" \
               -H "x-gold-pulse-secret: $GOLD_PULSE_API_SECRET" \
               "$BASE/api/scan"
           )"
@@ -81,8 +87,9 @@ jobs:
           fi
 
           if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
-            echo "❌ GOLD PULSE scan failed"
+            echo "❌ GOLD PULSE manual scan failed"
             exit 1
           fi
 
-          echo "✅ GOLD PULSE scan completed"
+          echo "✅ GOLD PULSE manual scan completed"
+          echo "========================================"
