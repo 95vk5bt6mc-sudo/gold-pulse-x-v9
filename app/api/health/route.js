@@ -11,7 +11,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v11.0 R2 SIMPLIFIED SIGNAL POLICY",
+    app: "GOLD PULSE X v11.1 MAIN TREND GUARD",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
