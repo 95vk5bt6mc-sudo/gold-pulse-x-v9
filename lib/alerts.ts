@@ -55,7 +55,7 @@ function fingerprint(payload: AnyRecord, slotMinutes: number): string {
   const d = payload?.tradeDecision || {};
   const slot = Math.floor(Date.now() / (slotMinutes * 60 * 1000));
   return [
-    "gold-pulse-v11-pattern-intelligence",
+    "gold-pulse-v11.1-main-trend-guard",
     payload.symbol || "XAU/USD",
     slot,
     d.direction || "WAIT"
@@ -66,7 +66,7 @@ export function buildSignalText(payload: AnyRecord, evaluation: AnyRecord): stri
   const d = payload.tradeDecision || {};
   const icon = d.direction === "BUY" ? "🟢" : "🔴";
   return [
-    `${icon} GOLD PULSE X v11 PATTERN INTELLIGENCE 5M`,
+    `${icon} GOLD PULSE X v11.1 MAIN TREND GUARD`,
     "",
     `${d.direction} · ${d.entryTier || "CONFIRMED"} · ${d.mode || "TREND"}`,
     `XAU/USD · Model estimate ${Math.round(Number(d.targetProbability || 0))}%`,
@@ -74,6 +74,7 @@ export function buildSignalText(payload: AnyRecord, evaluation: AnyRecord): stri
     `Confirmations ${Number(d.confirmationCount || 0)}/4 · Edge ${Number(d?.probabilityMap?.directionalEdge || 0)}`,
     `Market ${evaluation.marketRegime} · 5M trend ${d.mainTrend || "—"}`,
     `Pattern bias ${d?.fiveMinuteIntelligence?.bias?.direction || "WAIT"} · Trap risk ${Number(d?.fiveMinuteIntelligence?.trapRisk || 0)}%`,
+    `Main trend ${d?.fiveMinuteIntelligence?.mainTrendGuard?.direction || "MIXED"} · Strength ${Number(d?.fiveMinuteIntelligence?.mainTrendGuard?.strength || 0)}% · Persist ${Number(d?.fiveMinuteIntelligence?.mainTrendGuard?.persistenceBars || 0)}x5M`,
     `Next 5M U${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.up || 0)} D${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.down || 0)} W${Number(d?.fiveMinuteIntelligence?.patternMemory?.forecasts?.[0]?.probabilities?.sideway || 0)}`,
     "",
     `5C future ${(payload?.fiveCandleTruth?.patternMemory?.forecasts || []).slice(0,5).map((f: { candle: number; direction: string }) => `#${f.candle}:${f.direction}`).join(" ") || "—"}`,

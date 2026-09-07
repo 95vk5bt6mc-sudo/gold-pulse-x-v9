@@ -20,3 +20,13 @@
 Live Pattern Memory ใช้แท่งที่ provider โหลดมาในรอบปัจจุบันเท่านั้น ปัจจุบันจึงยังไม่ใช่คลังหลายล้านรูปแบบ การสร้าง Million-Pattern Archive ต้องมีข้อมูล XAU/USD ย้อนหลังหลายปีและกระบวนการฝึกแบบ Offline เพิ่มเติม
 
 ค่าความน่าจะเป็นเป็น Model Estimate ไม่ใช่อัตราชนะที่พิสูจน์แล้ว และระบบไม่รับประกันกำไร
+
+## v11.1 MAIN TREND GUARD
+
+- Main Trend First: BUY/SELL ต้องตามเทรนหลักที่ยืนยันแล้วเป็นค่าเริ่มต้น
+- ยืนยันเทรนอย่างน้อย 3 แท่ง 5M ต่อเนื่อง
+- MIXED / trend ยังไม่ชัด = WAIT
+- Counter-trend ถูกบล็อกโดยค่าเริ่มต้น
+- อนุญาต reversal สวนเทรนเฉพาะ CHOCH + confirmed divergence + fake breakout และ reversal score >= 82
+- Trend-following ENTRY ต้อง probability >= 68 และ signal score >= 65
+- ลด whipsaw และสัญญาณระยะสั้นที่กลับตัวเร็ว แต่จำนวนสัญญาณจะน้อยลง

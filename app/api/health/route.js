@@ -75,6 +75,14 @@ export async function GET() {
       entryTiers: ["CONFIRMED", "STRONG"],
       fiveCandleTruthUse: "evidence only when walk-forward quality is sufficient"
     },
+    mainTrendGuard: {
+      enabled: true,
+      mode: "MAIN_TREND_FIRST",
+      persistence: "3 consecutive 5M candles",
+      trendEntryMinimum: "probability >= 68 and score >= 65",
+      counterTrend: "blocked by default",
+      reversalException: "CHOCH + confirmed divergence + fake breakout, reversal score >= 82"
+    },
     patternIntelligence: {
       enabled: true,
       timeframe: "5min",

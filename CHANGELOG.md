@@ -1,3 +1,11 @@
+# v11.1.0 — MAIN TREND GUARD
+
+- Added MAIN TREND FIRST gating.
+- Requires 3 consecutive 5M trend-confirmation bars.
+- Blocks counter-trend entries by default.
+- Exceptional reversal requires CHOCH + confirmed divergence + fake breakout and reversal score >= 82.
+- Added stricter entry-quality thresholds and trend diagnostics.
+
 ## v11.0 R2.1 — LINE Smart Quota Guard
 - Reads LINE monthly quota and consumption before push/broadcast delivery.
 - Paces CONFIRMED alerts across Bangkok business days using cumulative monthly budget.

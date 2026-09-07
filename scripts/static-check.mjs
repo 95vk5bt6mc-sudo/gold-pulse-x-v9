@@ -12,6 +12,7 @@ const required = [
   "lib/intelligence/five-minute-intelligence.js",
   "lib/intelligence/five-candle-truth.js",
   "scripts/test-v11-intelligence.mjs",
+  "scripts/test-v11-main-trend-guard.mjs",
   ".github/workflows/gold-pulse-scan.yml",
   ".env.example"
 ];
@@ -24,8 +25,8 @@ for (const item of required) {
 }
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
-if (pkg.version !== "11.0.0") {
-  console.error(`❌ package version must be 11.0.0 (found ${pkg.version})`);
+if (pkg.version !== "11.1.0") {
+  console.error(`❌ package version must be 11.1.0 (found ${pkg.version})`);
   bad = true;
 } else {
   console.log("✅ package version 11.0.0");
