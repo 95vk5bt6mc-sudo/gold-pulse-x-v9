@@ -11,7 +11,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: ready,
-    app: "GOLD PULSE X v11.1 MAIN TREND GUARD",
+    app: "GOLD PULSE X v11.1.1 TREND PERSISTENCE HARD GATE",
     version: config.version,
     provider: config.provider,
     marketDataConfigured: config.marketDataConfigured,
@@ -77,11 +77,19 @@ export async function GET() {
     },
     mainTrendGuard: {
       enabled: true,
-      mode: "MAIN_TREND_FIRST",
-      persistence: "3 consecutive 5M candles",
+      mode: "MAIN_TREND_FIRST + 3X5M_PERSISTENCE_HARD_GATE",
+      persistence: "HARD GATE: 3 consecutive CLOSED 5M + EMA21/EMA50",
       trendEntryMinimum: "probability >= 68 and score >= 65",
       counterTrend: "blocked by default",
       reversalException: "CHOCH + confirmed divergence + fake breakout, reversal score >= 82"
+    },
+    trendPersistenceHardGate: {
+      enabled: true,
+      version: "11.1.1",
+      requiredClosed5mCandles: 3,
+      emaAlignment: "EMA21 vs EMA50 + slope confirmation",
+      requiresMainTrendAlignment: true,
+      failureAction: "WAIT / PERSISTENCE_BLOCK"
     },
     patternIntelligence: {
       enabled: true,

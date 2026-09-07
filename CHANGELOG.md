@@ -1,3 +1,10 @@
+# v11.1.1 — TREND PERSISTENCE HARD GATE
+
+- 3 closed 5M candles required.
+- EMA21/EMA50 alignment + slope required.
+- Must align with MAIN TREND.
+- Failure => WAIT / PERSISTENCE_BLOCK.
+
 # v11.1.0 — MAIN TREND GUARD
 
 - Added MAIN TREND FIRST gating.

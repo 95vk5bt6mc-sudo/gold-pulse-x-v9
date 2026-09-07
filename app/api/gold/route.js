@@ -212,6 +212,94 @@ async function fetchTimeframe(interval, key) {
   return candles;
 }
 
+
+function emaSeriesForPersistence(values, period) {
+  if (!Array.isArray(values) || values.length < period) return [];
+  const out = Array(values.length).fill(null);
+  const k = 2 / (period + 1);
+  let cur = values.slice(0, period).reduce((a,b)=>a+b,0) / period;
+  out[period - 1] = cur;
+  for (let i = period; i < values.length; i += 1) {
+    cur = values[i] * k + cur * (1 - k);
+    out[i] = cur;
+  }
+  return out;
+}
+
+function buildTrendPersistence(candles) {
+  const requiredBars = 3;
+  if (!Array.isArray(candles) || candles.length < 55) {
+    return { ready:false, requiredBars, confirmedBars:0, direction:"WAIT", reason:"insufficient-5m-history" };
+  }
+
+  const closes = candles.map(c => Number(c?.close));
+  if (!closes.every(Number.isFinite)) {
+    return { ready:false, requiredBars, confirmedBars:0, direction:"WAIT", reason:"invalid-5m-candles" };
+  }
+
+  const e21 = emaSeriesForPersistence(closes, 21);
+  const e50 = emaSeriesForPersistence(closes, 50);
+
+  const classify = (i) => {
+    if (i < 3) return "WAIT";
+    const c = closes[i], a = e21[i], b = e50[i], ap = e21[i-3], bp = e50[i-3];
+    if (![c,a,b,ap,bp].every(Number.isFinite)) return "WAIT";
+    if (c > a && a > b && a > ap && b >= bp) return "BUY";
+    if (c < a && a < b && a < ap && b <= bp) return "SELL";
+    return "WAIT";
+  };
+
+  const n = candles.length - 1;
+  const states = [n-2,n-1,n].map(classify);
+  const direction = states.every(x=>x==="BUY") ? "BUY" : states.every(x=>x==="SELL") ? "SELL" : "WAIT";
+
+  return {
+    ready:true,
+    requiredBars,
+    confirmedBars: direction === "WAIT" ? 0 : 3,
+    direction,
+    states,
+    emaConfirmed: direction !== "WAIT",
+    reason: direction === "WAIT" ? "3x5m-not-confirmed" : "3x5m-confirmed"
+  };
+}
+
+function applyTrendPersistenceHardGate(decision, persistence) {
+  if (!decision) return decision;
+
+  const dir = String(decision.direction || "WAIT").toUpperCase();
+  const mt = String(decision.mainTrend || "MIXED").toUpperCase();
+  const mtDir = mt === "BULLISH" ? "BUY" : mt === "BEARISH" ? "SELL" : "WAIT";
+  const out = { ...decision, trendPersistence:persistence };
+
+  if (decision.status !== "ENTRY" || !["BUY","SELL"].includes(dir)) return out;
+
+  const pass =
+    persistence?.ready === true &&
+    persistence?.confirmedBars >= 3 &&
+    persistence?.direction === dir &&
+    mtDir === dir;
+
+  if (pass) {
+    out.reasons = [...(decision.reasons || []),
+      "TREND PERSISTENCE PASS: 3/3 CLOSED 5M + EMA21/EMA50 + MAIN TREND"
+    ].slice(0,12);
+    return out;
+  }
+
+  out.originalDecision = decision.decision;
+  out.originalDirection = dir;
+  out.decision = "TREND PERSISTENCE HARD GATE - WAIT";
+  out.status = "WATCH";
+  out.direction = "WAIT";
+  out.entryTier = "PERSISTENCE_BLOCK";
+  out.alertKey = null;
+  out.reasons = [...(decision.reasons || []),
+    "TREND PERSISTENCE BLOCK: requires 3/3 CLOSED 5M + EMA21/EMA50 + MAIN TREND"
+  ].slice(0,12);
+  return out;
+}
+
 function combinedTradeDecision(oneMinute, fiveMinute, price) {
   const f3 = oneMinute?.forecasts?.[2];
   const f5 = oneMinute?.forecasts?.[4];
@@ -596,10 +684,14 @@ function buildPayload(m1, m5, mode = "live") {
   const oneAnalysis = analyze([...m1Closed], 5);
   const fiveAnalysis = analyze([...m5Closed], 5);
   const fiveMinuteIntelligence = analyzeFiveMinuteIntelligence(m5Closed);
-  const fiveCandleTruth = analyzeFiveCandleTruth(m5Closed);
+  
+  const trendPersistence = buildTrendPersistence(m5Closed);
+const fiveCandleTruth = analyzeFiveCandleTruth(m5Closed);
   const baseTradeDecision = combinedTradeDecision(oneAnalysis, fiveAnalysis, m1Closed.at(-1)?.close || 0);
   const intelligenceDecision = applyFiveMinuteIntelligenceOverlay(baseTradeDecision, fiveMinuteIntelligence);
-  const tradeDecision = finalizeSignalDecision(intelligenceDecision, { fiveCandleTruth });
+  
+  const persistenceDecision = applyTrendPersistenceHardGate(intelligenceDecision, trendPersistence);
+const tradeDecision = finalizeSignalDecision(persistenceDecision, { fiveCandleTruth });
   const smartFree = buildSmartFreeContext(tradeDecision, oneAnalysis, fiveAnalysis);
   return {
     ok: true,
@@ -636,6 +728,7 @@ function buildPayload(m1, m5, mode = "live") {
     oneMinute: { candles: m1Closed.slice(-140), analysis: oneAnalysis },
     fiveMinute: { candles: m5.slice(-140), analysis: fiveAnalysis },
     fiveMinuteIntelligence,
+    trendPersistence,
     fiveCandleTruth,
     tradeDecision
   };

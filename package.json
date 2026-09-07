@@ -1,6 +1,6 @@
 {
-  "name": "gold-pulse-x-v11-main-trend-guard",
-  "version": "11.1.0",
+  "name": "gold-pulse-x-v11-trend-persistence-hard-gate",
+  "version": "11.1.1",
   "private": true,
   "engines": {
     "node": ">=20.9.0"
@@ -16,7 +16,8 @@
     "check": "node scripts/static-check.mjs",
     "test:adaptive": "node scripts/test-v10.2-adaptive.mjs",
     "test:intelligence": "node scripts/test-v11-intelligence.mjs",
-    "test:trend-guard": "node scripts/test-v11-main-trend-guard.mjs"
+    "test:trend-guard": "node scripts/test-v11-main-trend-guard.mjs",
+    "test:persistence": "node scripts/test-v1111-trend-persistence.mjs"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",

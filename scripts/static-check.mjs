@@ -25,8 +25,8 @@ for (const item of required) {
 }
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
-if (pkg.version !== "11.1.0") {
-  console.error(`❌ package version must be 11.1.0 (found ${pkg.version})`);
+if (pkg.version !== "11.1.1") {
+  console.error(`❌ package version must be 11.1.1 (found ${pkg.version})`);
   bad = true;
 } else {
   console.log("✅ package version 11.0.0");
