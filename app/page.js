@@ -605,7 +605,7 @@ export default function Home() {
   return (
     <main className="shell">
       <header>
-        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v11.1 MAIN TREND GUARD</span></h1></div>
+        <div><p className="over">PERSONAL XAU/USD ENGINE</p><h1>GOLD PULSE <span>X v11.1.1 TREND PERSISTENCE GUARD</span></h1></div>
         <button onClick={load} disabled={loading}>{loading ? "กำลังโหลด..." : "อัปเดตข้อมูล"}</button>
       </header>
       <section className="panel lineStatus"><p className="eyebrow">LINE AUTOMATIC ALERT</p><b>CONNECTED · ENTRY signals push automatically</b><small>ใช้ Token ฝั่ง Server · มี cooldown และป้องกันสัญญาณซ้ำตาม alert key</small></section>
